@@ -1,6 +1,7 @@
 import { httpRouter } from 'convex/server'
 import { httpAction } from './_generated/server'
 import { internal } from './_generated/api'
+import { handleAgentRunRequest, handleDecisionRequest } from './httpInput'
 
 const http = httpRouter()
 const encoder = new TextEncoder()
@@ -76,9 +77,8 @@ http.route({
     if (!(await authorized(request, 'SUPER_COACH_DATA_SECRET'))) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const input = await request.json()
-    const id = await ctx.runMutation(internal.decisions.create, input)
-    return Response.json({ id })
+    const rawText = await request.text()
+    return handleDecisionRequest(rawText, input => ctx.runMutation(internal.decisions.create, input))
   }),
 })
 
@@ -162,9 +162,8 @@ http.route({
     if (!(await authorized(request, 'SUPER_COACH_DATA_SECRET'))) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const input = await request.json()
-    const id = await ctx.runMutation(internal.agentRuns.append, input)
-    return Response.json({ id })
+    const rawText = await request.text()
+    return handleAgentRunRequest(rawText, input => ctx.runMutation(internal.agentRuns.append, input))
   }),
 })
 
