@@ -9,6 +9,7 @@ import {
   type DiagnosePayload,
   type MindFormState,
 } from '@/lib/mind-form'
+import { bearerHeaders, isUnauthorized, readToken, writeToken } from '@/lib/client-auth'
 
 type Mode = 'Body' | 'Mind' | 'Career' | 'Super'
 type Metric = { value: number; at: string | null } | null
@@ -51,6 +52,8 @@ type StoredCheckIn = {
   selectedChoice: SelectedChoice
 }
 type CheckInsData = { checkIns: StoredCheckIn[] }
+type ErrorPayload = { error?: string }
+type DecisionResponse = ErrorPayload & { handoff?: string }
 
 const ACTIVE_SELVES: readonly ActiveSelf[] = ['operator', 'athlete', 'father', 'writer']
 const SCORES: readonly number[] = [1, 2, 3, 4, 5]
@@ -76,6 +79,19 @@ function metric(metric: Metric, unit: string) {
   return metric ? `${metric.value} ${unit}` : 'No reading'
 }
 
+function readJson<T>(response: Response): Promise<T> {
+  return response.json() as Promise<T>
+}
+
+function sessionStore(): Storage | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.sessionStorage
+  } catch {
+    return null
+  }
+}
+
 export default function Home() {
   const [active, setActive] = useState<Mode>('Body')
   const [body, setBody] = useState<BodyData | null>(null)
@@ -97,6 +113,10 @@ export default function Home() {
   const [diagnosing, setDiagnosing] = useState(false)
   const [committing, setCommitting] = useState<SelectedChoice | null>(null)
   const [resetting, setResetting] = useState(false)
+  const [token, setToken] = useState<string | null>(() => readToken(sessionStore()))
+  const [tokenDraft, setTokenDraft] = useState('')
+  const [needsToken, setNeedsToken] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
 
   const updateForm = useCallback(<K extends keyof MindFormState>(key: K, value: MindFormState[K]) => {
     setCheckInForm(prev => ({ ...prev, [key]: value }))
@@ -106,29 +126,44 @@ export default function Home() {
     setCheckInError(null)
   }, [])
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (activeToken: string | null) => {
     setLoading(true)
     setError(null)
     try {
+      const headers = bearerHeaders(activeToken)
       const responses = await Promise.all([
-        fetch('/api/body', { cache: 'no-store' }),
-        fetch('/api/mind', { cache: 'no-store' }),
-        fetch('/api/career', { cache: 'no-store' }),
+        fetch('/api/body', { cache: 'no-store', headers }),
+        fetch('/api/mind', { cache: 'no-store', headers }),
+        fetch('/api/career', { cache: 'no-store', headers }),
       ])
-      const payloads = await Promise.all(responses.map(response => response.json()))
+      const primaryUnauthorized = responses.some(response => isUnauthorized(response.status))
+      if (primaryUnauthorized) {
+        writeToken(sessionStore(), null)
+        setToken(null)
+        setNeedsToken(true)
+        setAuthError(activeToken ? 'That access token was not accepted.' : 'An access token is required.')
+        return
+      }
+      const payloads = await Promise.all([
+        readJson<BodyData & ErrorPayload>(responses[0]),
+        readJson<MindData & ErrorPayload>(responses[1]),
+        readJson<CareerData & ErrorPayload>(responses[2]),
+      ])
       const failed = responses.findIndex(response => !response.ok)
       if (failed >= 0) throw new Error(payloads[failed]?.error ?? 'A mode failed to load')
       setBody(payloads[0])
       setMind(payloads[1])
       setCareer(payloads[2])
+      setNeedsToken(false)
+      setAuthError(null)
       try {
-        const runsResponse = await fetch('/api/runs', { cache: 'no-store' })
-        setRuns(runsResponse.ok ? await runsResponse.json() : { runs: [] })
+        const runsResponse = await fetch('/api/runs', { cache: 'no-store', headers })
+        setRuns(runsResponse.ok ? await readJson<RunsData>(runsResponse) : { runs: [] })
       } catch {
         setRuns({ runs: [] })
       }
       try {
-        const checkInsResponse = await fetch('/api/mind/check-in', { cache: 'no-store' })
+        const checkInsResponse = await fetch('/api/mind/check-in', { cache: 'no-store', headers })
         if (checkInsResponse.ok) {
           const payload = (await checkInsResponse.json()) as CheckInsData
           setCheckIns(Array.isArray(payload.checkIns) ? payload.checkIns : [])
@@ -147,9 +182,20 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void refresh(), 0)
+    const timer = window.setTimeout(() => void refresh(readToken(sessionStore())), 0)
     return () => window.clearTimeout(timer)
   }, [refresh])
+
+  async function submitToken(event: FormEvent) {
+    event.preventDefault()
+    const next = tokenDraft.trim()
+    if (!next) return
+    writeToken(sessionStore(), next)
+    setToken(next)
+    setTokenDraft('')
+    setAuthError(null)
+    await refresh(next)
+  }
 
   async function saveDecision(event: FormEvent) {
     event.preventDefault()
@@ -159,10 +205,17 @@ export default function Home() {
     try {
       const response = await fetch('/api/mind', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...bearerHeaders(token) },
         body: JSON.stringify({ decision, status: 'open', linkedMood: 'check-in' }),
       })
-      const payload = await response.json()
+      if (isUnauthorized(response.status)) {
+        writeToken(sessionStore(), null)
+        setToken(null)
+        setNeedsToken(true)
+        setAuthError('That access token was not accepted.')
+        return
+      }
+      const payload = await readJson<DecisionResponse>(response)
       if (!response.ok) throw new Error(payload.error ?? 'Decision was not saved')
       if (typeof payload.handoff === 'string' && payload.handoff) {
         setHandoff(payload.handoff)
@@ -170,7 +223,7 @@ export default function Home() {
         setHandoff(null)
       }
       setDecision('')
-      await refresh()
+      await refresh(token)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Decision was not saved')
     } finally {
@@ -189,7 +242,7 @@ export default function Home() {
       const payload = buildDiagnosePayload(checkInForm)
       const response = await fetch('/api/mind/check-in', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...bearerHeaders(token) },
         body: JSON.stringify(payload),
       })
       const data = (await response.json()) as {
@@ -222,7 +275,7 @@ export default function Home() {
     try {
       const response = await fetch('/api/mind/check-in', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...bearerHeaders(token) },
         body: JSON.stringify(buildSelectionPayload(
           { ...diagnosedInputs, energy: diagnosedInputs.energy, positiveEmotion: diagnosedInputs.positiveEmotion },
           choice,
@@ -245,7 +298,7 @@ export default function Home() {
         setFrame(null)
         setDiagnosedInputs(null)
         setCheckInForm(EMPTY_FORM)
-        await refresh()
+        await refresh(token)
       }
     } catch (caught) {
       setCheckInError(caught instanceof Error ? caught.message : 'Check-in was not persisted')
@@ -263,7 +316,7 @@ export default function Home() {
     try {
       const response = await fetch('/api/mind/check-in', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...bearerHeaders(token) },
         body: JSON.stringify({ confirm: true }),
       })
       const data = (await response.json()) as { error?: string }
@@ -271,12 +324,54 @@ export default function Home() {
       setFrame(null)
       setDiagnosedInputs(null)
       setCheckInHandoff(null)
-      await refresh()
+      await refresh(token)
     } catch (caught) {
       setCheckInError(caught instanceof Error ? caught.message : 'Reset failed')
     } finally {
       setResetting(false)
     }
+  }
+
+  if (needsToken) {
+    return (
+      <main className="shell">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">LIVE CONTROL SURFACE</p>
+            <h1>Super Coach</h1>
+            <p className="subtitle">Access is limited to judges with a shared token.</p>
+          </div>
+        </header>
+        <section className="panel access-panel" aria-labelledby="access-title">
+          <div className="panel-heading">
+            <div>
+              <p className="kicker">JUDGE ACCESS</p>
+              <h2 id="access-title">Enter access token</h2>
+            </div>
+          </div>
+          <form className="access-form" onSubmit={submitToken} autoComplete="off">
+            <label htmlFor="access-token">Access token</label>
+            <div>
+              <input
+                id="access-token"
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                inputMode="text"
+                value={tokenDraft}
+                onChange={event => setTokenDraft(event.target.value)}
+                aria-invalid={Boolean(authError)}
+                aria-describedby={authError ? 'access-error' : undefined}
+                placeholder="Paste the token you were given"
+              />
+              <button disabled={loading || !tokenDraft.trim()}>{loading ? 'Checking…' : 'Unlock dashboard'}</button>
+            </div>
+            {authError && <p id="access-error" className="error" role="alert">{authError}</p>}
+            <p className="access-note">The token stays in this browser tab only. Close the tab to forget it.</p>
+          </form>
+        </section>
+      </main>
+    )
   }
 
   return (
@@ -304,7 +399,7 @@ export default function Home() {
 
       <div className="utility-row">
         <p>{loading ? 'Refreshing live sources…' : lastRefreshed ? `Last refresh ${fmtTime(lastRefreshed)}` : 'Not refreshed'}</p>
-        <button className="text-button" onClick={() => void refresh()} disabled={loading}>Refresh evidence</button>
+        <button className="text-button" onClick={() => void refresh(token)} disabled={loading}>Refresh evidence</button>
       </div>
       {error && <div className="error" role="alert">{error}</div>}
 
