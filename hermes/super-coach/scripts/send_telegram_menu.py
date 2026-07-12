@@ -29,6 +29,7 @@ REQUIRED_VARS = ("TELEGRAM_BOT_TOKEN", "TELEGRAM_HOME_CHANNEL")
 
 GREETING = "Hi, I'm your Super Coach. What do you need coaching with?"
 BUTTONS = ("Body", "Mind", "Career", "Super")
+HOME_BUTTON = "🏠 Home"
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
 
 
@@ -64,15 +65,23 @@ def load_env(hermes_home: pathlib.Path) -> dict:
     return values
 
 
-def build_payload(chat_id: str) -> dict:
-    """Build the Telegram sendMessage payload with the persistent 4-button keyboard."""
-    keyboard = [
-        [{"text": BUTTONS[0]}, {"text": BUTTONS[1]}],
-        [{"text": BUTTONS[2]}, {"text": BUTTONS[3]}],
-    ]
+def build_payload(chat_id: str, view: str = "home", floor: str | None = None) -> dict:
+    """Build a persistent Home keyboard or a floor keyboard with one Home action."""
+    if view == "home":
+        keyboard = [
+            [{"text": BUTTONS[0]}, {"text": BUTTONS[1]}],
+            [{"text": BUTTONS[2]}, {"text": BUTTONS[3]}],
+        ]
+        text = GREETING
+    elif view == "floor" and floor in BUTTONS:
+        keyboard = [[{"text": HOME_BUTTON}]]
+        text = f"{floor} floor. Ask naturally, or tap {HOME_BUTTON} to return to the four coaching modes."
+    else:
+        raise ValueError("view must be 'home', or 'floor' with a valid floor name")
+
     return {
         "chat_id": chat_id,
-        "text": GREETING,
+        "text": text,
         "reply_markup": {
             "keyboard": keyboard,
             "is_persistent": True,
@@ -101,11 +110,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--dry-run", action="store_true",
                         help="Print redacted JSON payload and exit without any network call.")
+    parser.add_argument("--view", choices=("home", "floor"), default="home",
+                        help="Show the four-mode Home keyboard or a floor keyboard.")
+    parser.add_argument("--floor", choices=BUTTONS,
+                        help="Floor name required when --view floor is used.")
     args = parser.parse_args(argv)
+    if args.view == "floor" and not args.floor:
+        parser.error("--floor is required when --view floor is used")
 
     hermes_home = _resolve_home()
     env = load_env(hermes_home)
-    payload = build_payload(env["TELEGRAM_HOME_CHANNEL"])
+    payload = build_payload(env["TELEGRAM_HOME_CHANNEL"], view=args.view, floor=args.floor)
 
     if args.dry_run:
         preview = {

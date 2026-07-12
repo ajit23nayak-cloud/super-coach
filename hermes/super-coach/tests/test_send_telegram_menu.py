@@ -85,6 +85,18 @@ class BuildPayloadTests(unittest.TestCase):
         payload = menu.build_payload(chat_id=SECRET_CHAT)
         self.assertEqual(payload["chat_id"], SECRET_CHAT)
 
+    def test_floor_view_has_exactly_one_home_button(self):
+        payload = menu.build_payload(chat_id=SECRET_CHAT, view="floor", floor="Body")
+        buttons = [b["text"] for row in payload["reply_markup"]["keyboard"] for b in row]
+        self.assertEqual(buttons, ["🏠 Home"])
+        self.assertIn("Body", payload["text"])
+
+    def test_home_view_never_adds_home_as_a_fifth_button(self):
+        payload = menu.build_payload(chat_id=SECRET_CHAT, view="home")
+        buttons = [b["text"] for row in payload["reply_markup"]["keyboard"] for b in row]
+        self.assertEqual(buttons, ["Body", "Mind", "Career", "Super"])
+        self.assertNotIn("🏠 Home", buttons)
+
 
 class DryRunTests(unittest.TestCase):
     def _run_main(self, home: pathlib.Path):
