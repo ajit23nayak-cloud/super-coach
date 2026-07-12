@@ -20,6 +20,28 @@ export default defineSchema({
     .index("by_createdAt", ["createdAt"])
     .index("by_status", ["status"]),
 
+  // Structured Mind check-ins. Additive to `decisions`; only written after Ajit explicitly selects A or B.
+  mindCheckIns: defineTable({
+    createdAt: v.number(),
+    energy: v.number(),
+    positiveEmotion: v.number(),
+    stateWord: v.string(),
+    activeSelf: v.union(
+      v.literal('operator'),
+      v.literal('athlete'),
+      v.literal('father'),
+      v.literal('writer'),
+    ),
+    shipIntent: v.optional(v.string()),
+    hedgedDecision: v.optional(v.string()),
+    diagnosis: v.string(),
+    choiceA: v.string(),
+    choiceB: v.string(),
+    selectedChoice: v.union(v.literal('A'), v.literal('B')),
+  })
+    .index('by_createdAt', ['createdAt'])
+    .index('by_activeSelf', ['activeSelf']),
+
   // Observability: per-sub-agent run log (Body/Mind + Super later).
   agentRuns: defineTable({
     createdAt: v.number(),

@@ -83,6 +83,60 @@ http.route({
 })
 
 http.route({
+  path: '/data/mind-check-ins',
+  method: 'GET',
+  handler: httpAction(async (ctx, request) => {
+    if (!(await authorized(request, 'SUPER_COACH_DATA_SECRET'))) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const limit = Number(new URL(request.url).searchParams.get('limit') ?? 20)
+    return Response.json(await ctx.runQuery(internal.mindCheckIns.list, { limit }))
+  }),
+})
+
+http.route({
+  path: '/data/mind-check-ins',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    if (!(await authorized(request, 'SUPER_COACH_DATA_SECRET'))) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const contentLength = Number(request.headers.get('content-length') ?? 0)
+    if (contentLength > 100_000) {
+      return Response.json({ error: 'Payload too large' }, { status: 413 })
+    }
+    const input = await request.json()
+    const id = await ctx.runMutation(internal.mindCheckIns.create, input)
+    return Response.json({ id })
+  }),
+})
+
+http.route({
+  path: '/data/mind-check-ins',
+  method: 'DELETE',
+  handler: httpAction(async (ctx, request) => {
+    if (!(await authorized(request, 'SUPER_COACH_DATA_SECRET'))) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const contentLength = Number(request.headers.get('content-length') ?? 0)
+    if (contentLength > 1_000) {
+      return Response.json({ error: 'Payload too large' }, { status: 413 })
+    }
+    let body: { confirm?: unknown } = {}
+    try {
+      body = (await request.json()) as { confirm?: unknown }
+    } catch {
+      return Response.json({ error: 'confirm must be true' }, { status: 400 })
+    }
+    if (body?.confirm !== true) {
+      return Response.json({ error: 'confirm must be true' }, { status: 400 })
+    }
+    const cleared = await ctx.runMutation(internal.mindCheckIns.clearAll, {})
+    return Response.json({ cleared })
+  }),
+})
+
+http.route({
   path: '/data/runs',
   method: 'GET',
   handler: httpAction(async (ctx, request) => {
