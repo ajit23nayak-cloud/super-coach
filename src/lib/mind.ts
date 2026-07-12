@@ -211,6 +211,55 @@ export function diagnoseMindCheckIn(input: ValidMindCheckIn): MindChoiceFrame {
   }
 }
 
+export interface PersistedMindCheckIn {
+  energy: number
+  positiveEmotion: number
+  stateWord: string
+  activeSelf: ActiveSelf
+  shipIntent?: string
+  hedgedDecision?: string
+  selectedChoice: SelectedChoice
+  diagnosis: string
+  choiceA: string
+  choiceB: string
+}
+
+function requiredLongText(value: unknown, name: string, max: number): string {
+  const trimmed = typeof value === 'string' ? value.trim() : ''
+  if (!trimmed) throw new Error(`${name} is required`)
+  if (trimmed.length > max) throw new Error(`${name} must be ${max} characters or fewer`)
+  return trimmed
+}
+
+export function parseMindCheckInPersistence(input: unknown): PersistedMindCheckIn {
+  const row = (input ?? {}) as Record<string, unknown>
+  if (row.selectedChoice !== 'A' && row.selectedChoice !== 'B') {
+    throw new Error('selectedChoice must be A or B')
+  }
+  const base: ValidMindCheckIn = validateMindCheckIn({
+    energy: row.energy,
+    positiveEmotion: row.positiveEmotion,
+    stateWord: row.stateWord,
+    activeSelf: row.activeSelf,
+    shipIntent: row.shipIntent,
+    hedgedDecision: row.hedgedDecision,
+    selectedChoice: row.selectedChoice,
+  })
+  const result: PersistedMindCheckIn = {
+    energy: base.energy,
+    positiveEmotion: base.positiveEmotion,
+    stateWord: base.stateWord,
+    activeSelf: base.activeSelf,
+    selectedChoice: base.selectedChoice ?? 'A',
+    diagnosis: requiredLongText(row.diagnosis, 'diagnosis', 2000),
+    choiceA: requiredLongText(row.choiceA, 'choiceA', 2000),
+    choiceB: requiredLongText(row.choiceB, 'choiceB', 2000),
+  }
+  if (base.shipIntent) result.shipIntent = base.shipIntent
+  if (base.hedgedDecision) result.hedgedDecision = base.hedgedDecision
+  return result
+}
+
 const CRISIS_PATTERNS = [
   /\b(?:kill|hurt|harm) myself\b/i,
   /\bsuicid(?:e|al)\b/i,

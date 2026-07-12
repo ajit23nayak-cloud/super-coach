@@ -65,6 +65,43 @@ export async function createRun(input: AgentRunInput): Promise<string> {
   return payload.id
 }
 
+export async function getMindCheckIns(limit = 20): Promise<unknown[]> {
+  const response = await dataFetch(`/data/mind-check-ins?limit=${encodeURIComponent(limit)}`)
+  if (!response.ok) throw new Error(`Convex mind check-in read failed: ${response.status}`)
+  return response.json()
+}
+
+export async function createMindCheckIn(input: {
+  energy: number
+  positiveEmotion: number
+  stateWord: string
+  activeSelf: 'operator' | 'athlete' | 'father' | 'writer'
+  shipIntent?: string
+  hedgedDecision?: string
+  diagnosis: string
+  choiceA: string
+  choiceB: string
+  selectedChoice: 'A' | 'B'
+}): Promise<string> {
+  const response = await dataFetch('/data/mind-check-ins', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) throw new Error(`Convex mind check-in write failed: ${response.status}`)
+  const payload = (await response.json()) as { id: string }
+  return payload.id
+}
+
+export async function clearMindCheckIns(): Promise<number> {
+  const response = await dataFetch('/data/mind-check-ins', {
+    method: 'DELETE',
+    body: JSON.stringify({ confirm: true }),
+  })
+  if (!response.ok) throw new Error(`Convex mind check-in clear failed: ${response.status}`)
+  const payload = (await response.json()) as { cleared: number }
+  return payload.cleared
+}
+
 export async function createDecision(input: {
   decision: string
   status: 'open' | 'made' | 'deferred'

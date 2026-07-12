@@ -12,6 +12,7 @@ import type * as agentRuns from "../agentRuns.js";
 import type * as decisions from "../decisions.js";
 import type * as health from "../health.js";
 import type * as http from "../http.js";
+import type * as mindCheckIns from "../mindCheckIns.js";
 
 import type {
   ApiFromModules,
@@ -24,6 +25,7 @@ declare const fullApi: ApiFromModules<{
   decisions: typeof decisions;
   health: typeof health;
   http: typeof http;
+  mindCheckIns: typeof mindCheckIns;
 }>;
 
 /**
