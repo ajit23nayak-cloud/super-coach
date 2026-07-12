@@ -34,6 +34,12 @@ class SuperSynthesisContractTests(unittest.TestCase):
         self.assertIn("keywords", self.text.lower())
         self.assertIn("CUMULATIVE INSIGHT", self.text)
 
+    def test_allows_exactly_one_short_final_voice_note(self):
+        self.assertIn("at most one ElevenLabs voice note", self.text)
+        self.assertIn("100-120 words", self.text)
+        self.assertIn("under 60 seconds", self.text)
+        self.assertIn("never for activation", self.text)
+
 
 if __name__ == "__main__":
     unittest.main()

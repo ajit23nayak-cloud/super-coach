@@ -140,6 +140,8 @@ Super orchestrates. It does not read Gmail, Convex, or run check-ins directly â€
 
    Do not add a `PER-DOMAIN` section that merely repeats the children. The evidence belongs inside the chain; the value of Super is the cumulative insight.
 
+   Generate audio only after the final synthesis, never for activation, interim child results, per-domain updates, or follow-ups. One Super run may produce at most one ElevenLabs voice note. Rewrite the spoken version to 100-120 words, verify it is under 60 seconds, and use a warm, calm, peer-level coach voice rather than an announcer or rushed delivery. The audio includes the cumulative insight, two or three decisive evidence points, and the decision; it must not read IDs, JSON, or long metric lists aloud.
+
 6. Before sending, run this silent quality gate:
    - Are all three domains explicitly cited?
    - Does the chain use actual metrics and keywords rather than category labels?
