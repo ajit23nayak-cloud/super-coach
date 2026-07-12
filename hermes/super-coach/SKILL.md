@@ -105,29 +105,50 @@ Super orchestrates. It does not read Gmail, Convex, or run check-ins directly �
    ])
    ```
 
-2. **Wait for all three results.** Do not synthesize on partial data. The activation message (`Super mode activated...`) is status only and is never the Super insight. If the user sends a follow-up while the batch is pending, preserve it as additional context and reply only that it will be included; do not replace the pending synthesis with single-signal advice. After all children return, the final response must explicitly use Body, Mind, and Career evidence, including a per-domain line for each. If any child errors or returns empty, use the evidence-weak fallback in step 4.
+2. **Wait for all three results and extract evidence atoms.** Do not synthesize on partial data. The activation message (`Super mode activated...`) is status only and is never the Super insight. If the user sends a follow-up while the batch is pending, preserve it as additional context and reply only that it will be included.
 
-3. **Synthesise the cross-domain insight.** The insight must:
-   - Connect a cause in one domain to an effect in another (Body↔Career, Body↔Mind, Mind↔Career — at least two domains).
-   - Cite the specific data points from the child JSON (numbers, thread IDs, decision IDs).
-   - Be something the user has not consciously said in this session.
-   - End with ONE executable action, routed through Career on confirmation.
+   Build a compact evidence ledger before writing prose:
+   - **Body evidence atom:** one current metric with value, unit, measurement timestamp, recency, and confidence; if no current metric exists, use the explicit missing-data fact and one dated context value.
+   - **Mind evidence atom:** one stored or explicitly self-reported state keyword plus one open decision, repeated behavior, or hedge keyword, with timestamp/recency and confidence.
+   - **Career evidence atom:** one named topic, person, thread, calendar event, deadline, or opportunity keyword with its evidence ID, timing, relative importance, and confidence.
 
-4. **Evidence-weak fallback.** If the three child outputs do not support a cross-domain link — e.g. Convex returned no readings, or Gmail had zero flagged threads, or the linkage is speculative — say so explicitly: `Evidence is thin: <what's missing>. I don't have a real cross-domain insight for you today. Here's one grounded observation per domain:` followed by one line per child. Never invent a link to fill the slot.
+   The final answer must use all three domains. Do not let one vivid follow-up such as `I'm tired` replace the ledger.
 
-5. Output shape (send to Telegram; optionally speak via ElevenLabs if `TTS` is configured):
+3. **Build the cumulative synthesis, not three summaries joined together.** Use this reasoning sequence privately before responding:
+   1. Mark every claim as `FACT` or `INFERENCE`.
+   2. Weight evidence by recency and confidence. Current measured facts outrank old context; explicit self-report outranks inferred mood; sent commitments outrank drafts.
+   3. Match metrics and keywords across the ledger. Look for contradiction, reinforcement, or opportunity, such as Body capacity versus Mind intent versus Career consequence.
+   4. Form a **THREE-DOMAIN CHAIN** in one causal sentence: `Body condition → Mind behavior/decision → Career cost or leverage`, or the reverse when Career is the initiating constraint.
+   5. Name the **DOMINANT CONSTRAINT** that explains the combined state.
+   6. Name the **LEVERAGE POINT** where one move changes more than one domain.
+   7. End with one **DECISION** Ajit must make. Career executes nothing until explicit confirmation.
+
+   A valid cumulative insight cites at least one Body metric or missing-data fact, one Mind keyword or decision, and one Career topic/event/thread. If any of those three evidence atoms is absent, use the fallback below instead of pretending the chain exists.
+
+4. **Evidence-weak fallback.** Say: `Evidence is thin: <missing or stale atom>. I cannot support a three-domain chain today.` Then list the available FACTS and ask for the one missing input. Do not emit a generic recommendation and do not convert old context into current metrics.
+
+5. Output shape (send to Telegram):
 
    ```
-   INSIGHT: <2-3 sentences, cross-domain, cites data>
-   EVIDENCE: <bulleted data points from child JSON>
-   ACTION: <one move; state that Career will execute it only on confirmation>
-   PER-DOMAIN:
-     Body: <one line>
-     Mind: <one line>
-     Career: <one line>
+   CUMULATIVE INSIGHT: <2-4 sentences; cites Body + Mind + Career and states the non-obvious combined meaning>
+   THREE-DOMAIN CHAIN: <Body FACT> → <Mind FACT> → <Career FACT>; INFERENCE: <causal interpretation>
+   DOMINANT CONSTRAINT: <one sentence>
+   LEVERAGE POINT: <one sentence>
+   DECISION: <one concrete choice or question; state that nothing will be executed without confirmation>
+   CONFIDENCE: <HIGH | MEDIUM | LOW, with the stale or missing evidence named>
    ```
 
-6. Done when: the message above is delivered AND either the user confirmed the action (Career executes exactly one thing) or declined.
+   Do not add a `PER-DOMAIN` section that merely repeats the children. The evidence belongs inside the chain; the value of Super is the cumulative insight.
+
+6. Before sending, run this silent quality gate:
+   - Are all three domains explicitly cited?
+   - Does the chain use actual metrics and keywords rather than category labels?
+   - Is the insight non-obvious and cumulative?
+   - Are FACT and INFERENCE distinguishable?
+   - Are recency and confidence explicit?
+   - Is there exactly one decision?
+
+   If any answer is no, rewrite once. Done when the final synthesis is delivered and Ajit either confirms or declines the decision.
 
 ## Menu script (setup)
 
