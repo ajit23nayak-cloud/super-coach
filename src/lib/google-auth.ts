@@ -17,6 +17,13 @@ interface GoogleToken {
 }
 
 const FIVE_MINUTES_MS = 5 * 60 * 1000
+const CLOUDFLARE_SECRET_NAMES = [
+  'GOOGLE_CLIENT_ID',
+  'GOOGLE_CLIENT_SECRET',
+  'GOOGLE_REFRESH_TOKEN',
+] as const
+
+let cloudflareToken: GoogleToken | null = null
 
 function tokenPath(): string {
   const hermesHome =
@@ -48,7 +55,25 @@ function readToken(): GoogleToken {
   return JSON.parse(fs.readFileSync(p, 'utf-8')) as GoogleToken
 }
 
-async function refresh(token: GoogleToken): Promise<GoogleToken> {
+function readCloudflareCredentials(): GoogleToken | null {
+  const values = CLOUDFLARE_SECRET_NAMES.map(name => process.env[name])
+  const configured = values.filter(Boolean).length
+  if (configured === 0) return null
+  if (configured !== CLOUDFLARE_SECRET_NAMES.length) {
+    throw new Error('Google OAuth Cloudflare secrets are incomplete')
+  }
+  return {
+    client_id: values[0]!,
+    client_secret: values[1]!,
+    refresh_token: values[2]!,
+  }
+}
+
+function accessToken(token: GoogleToken): string | null {
+  return token.access_token ?? token.token ?? null
+}
+
+async function refresh(token: GoogleToken, persist: boolean): Promise<GoogleToken> {
   const tokenUri = token.token_uri ?? 'https://oauth2.googleapis.com/token'
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
@@ -63,10 +88,7 @@ async function refresh(token: GoogleToken): Promise<GoogleToken> {
     body: body.toString(),
   })
 
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Token refresh failed (${res.status}): ${text}`)
-  }
+  if (!res.ok) throw new Error(`Token refresh failed (${res.status})`)
 
   const data = (await res.json()) as {
     access_token: string
@@ -81,28 +103,38 @@ async function refresh(token: GoogleToken): Promise<GoogleToken> {
     expiry: new Date(Date.now() + data.expires_in * 1000).toISOString(),
   }
 
-  const destination = tokenPath()
-  const temporary = `${destination}.${process.pid}.${randomUUID()}.tmp`
-  try {
-    fs.writeFileSync(temporary, JSON.stringify(updated, null, 2), {
-      encoding: 'utf-8',
-      mode: 0o600,
-    })
-    fs.renameSync(temporary, destination)
-  } finally {
-    if (fs.existsSync(temporary)) fs.rmSync(temporary, { force: true })
+  if (persist) {
+    const destination = tokenPath()
+    const temporary = `${destination}.${process.pid}.${randomUUID()}.tmp`
+    try {
+      fs.writeFileSync(temporary, JSON.stringify(updated, null, 2), {
+        encoding: 'utf-8',
+        mode: 0o600,
+      })
+      fs.renameSync(temporary, destination)
+    } finally {
+      if (fs.existsSync(temporary)) fs.rmSync(temporary, { force: true })
+    }
   }
   return updated
 }
 
 export async function getAccessToken(): Promise<string> {
+  const cloudflareCredentials = readCloudflareCredentials()
+  if (cloudflareCredentials) {
+    if (!cloudflareToken || isExpired(cloudflareToken) || !accessToken(cloudflareToken)) {
+      cloudflareToken = await refresh(cloudflareCredentials, false)
+    }
+    return accessToken(cloudflareToken)!
+  }
+
   let token = readToken()
   if (isExpired(token)) {
-    token = await refresh(token)
+    token = await refresh(token, true)
   }
-  const accessToken = token.access_token ?? token.token
-  if (!accessToken) {
+  const storedAccessToken = accessToken(token)
+  if (!storedAccessToken) {
     throw new Error('google_token.json has no access token field')
   }
-  return accessToken
+  return storedAccessToken
 }

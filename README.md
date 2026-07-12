@@ -24,7 +24,7 @@ npm run dev
 
 Open `http://localhost:3000`. Development API access is limited to loopback requests.
 
-Google Workspace OAuth is read server-side from the active Hermes profile's `google_token.json`; tokens are never exposed to the browser or committed.
+Google Workspace OAuth is read server-side from the active Hermes profile's `google_token.json`. In Cloudflare, it uses encrypted Worker secrets instead. Tokens are never exposed to the browser or committed.
 
 ## Security before deployment
 
@@ -34,6 +34,14 @@ Copy `.env.example` to `.env.local` and configure:
 - `SUPER_COACH_API_TOKEN`: required as `Authorization: Bearer ...` by every `/api/*` route outside explicitly enabled local development.
 - `SUPER_COACH_DATA_SECRET`: shared only between the Next.js server and authenticated Convex HTTP actions.
 - `NEXT_PUBLIC_CONVEX_URL` / `NEXT_PUBLIC_CONVEX_SITE_URL`: created by `npx convex dev`.
+
+For Cloudflare, configure these as encrypted Worker secrets rather than plain variables or repository files:
+
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_REFRESH_TOKEN`
+
+All three Google secrets are required together. A partial configuration fails closed and does not fall back to the local Hermes credential file.
 
 Set this separately in the Convex environment:
 
