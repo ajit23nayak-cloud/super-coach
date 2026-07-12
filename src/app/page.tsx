@@ -25,6 +25,8 @@ type MindData = { decisions: Decision[] }
 type InboxItem = { messageId: string; from: string; subject: string; date: string }
 type CalEvent = { id: string; summary?: string; start: { dateTime?: string; date?: string }; end: { dateTime?: string; date?: string } }
 type CareerData = { inboxItems: InboxItem[]; events: CalEvent[]; conflicts: Array<{ a: CalEvent; b: CalEvent }> }
+type AgentRun = { _id: string; agent: string; createdAt: number; latencyMs?: number; status?: string }
+type RunsData = { runs: AgentRun[] }
 
 const modes: Mode[] = ['Body', 'Mind', 'Career', 'Super']
 
@@ -42,6 +44,7 @@ export default function Home() {
   const [body, setBody] = useState<BodyData | null>(null)
   const [mind, setMind] = useState<MindData | null>(null)
   const [career, setCareer] = useState<CareerData | null>(null)
+  const [runs, setRuns] = useState<RunsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [lastRefreshed, setLastRefreshed] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -64,6 +67,12 @@ export default function Home() {
       setBody(payloads[0])
       setMind(payloads[1])
       setCareer(payloads[2])
+      try {
+        const runsResponse = await fetch('/api/runs', { cache: 'no-store' })
+        setRuns(runsResponse.ok ? await runsResponse.json() : { runs: [] })
+      } catch {
+        setRuns({ runs: [] })
+      }
       setLastRefreshed(Date.now())
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to load live data')
@@ -182,6 +191,16 @@ export default function Home() {
             <Ready label="Body" ready={Boolean(body)} detail={body ? `${body.rows} Convex rows read` : 'Waiting for health data'} />
             <Ready label="Mind" ready={Boolean(mind)} detail={mind ? `${mind.decisions.length} decisions read` : 'Waiting for decision log'} />
             <Ready label="Career" ready={Boolean(career)} detail={career ? `${career.inboxItems.length} mails, ${career.events.length} events` : 'Waiting for Workspace'} />
+          </div>
+          <div className="trace">
+            <h3>Latest delegation trace</h3>
+            {(runs?.runs ?? []).slice(0, 4).map(run => (
+              <article key={run._id}>
+                <span className={run.status === 'passed' ? 'ready-dot ready' : 'ready-dot'} />
+                <strong>{run.agent}</strong>
+                <small>{run.latencyMs == null ? 'Latency unavailable' : `${(run.latencyMs / 1000).toFixed(2)}s`} · {run.status ?? 'unknown'}</small>
+              </article>
+            ))}
           </div>
           <div className="telegram-callout"><div><strong>Run the orchestration in Telegram</strong><p>Tap Super in the persistent four-button menu. Hermes will launch the three sub-agents and return the evidenced synthesis in that conversation.</p></div><span>Menu message 103</span></div>
         </section>

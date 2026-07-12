@@ -1,0 +1,13 @@
+{
+  "scenario": "real-run-2026-07-12",
+  "evidence": {
+    "body": "HR 77, RHR 53, sleep 349 minutes, HRV unavailable",
+    "mind": "Open decision: Ship Super Coach before the submission deadline",
+    "career": "No stalled human thread or overdue promise; buildathon overlaps goals review"
+  },
+  "outputs": {
+    "v1": "You should balance work and rest, stay focused, and manage your calendar carefully.",
+    "v2": "You slept under six hours and still have an open shipping decision. Protect your energy and focus on finishing Super Coach today. ACTION: block one hour to ship.",
+    "v3": "INSIGHT: Your constraint is self-generated scope, not external pressure. Gmail shows no stalled human thread or overdue promise, but Ship Super Coach remains open while you are operating on 349 minutes of sleep. HRV is unavailable, so no HRV claim is made. ACTION: freeze scope, finish the secured core, run the demo, and submit before adding another power-up."
+  }
+}

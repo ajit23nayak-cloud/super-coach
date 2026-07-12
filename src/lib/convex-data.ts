@@ -38,6 +38,33 @@ export async function getDecisions(limit = 20): Promise<unknown[]> {
   return response.json()
 }
 
+export interface AgentRunInput {
+  agent: string
+  input?: unknown
+  output?: unknown
+  tokens?: number
+  costUsd?: number
+  latencyMs?: number
+  status?: string
+  error?: string
+}
+
+export async function getRuns(limit = 50): Promise<unknown[]> {
+  const response = await dataFetch(`/data/runs?limit=${encodeURIComponent(limit)}`)
+  if (!response.ok) throw new Error(`Convex run read failed: ${response.status}`)
+  return response.json()
+}
+
+export async function createRun(input: AgentRunInput): Promise<string> {
+  const response = await dataFetch('/data/runs', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) throw new Error(`Convex run write failed: ${response.status}`)
+  const payload = (await response.json()) as { id: string }
+  return payload.id
+}
+
 export async function createDecision(input: {
   decision: string
   status: 'open' | 'made' | 'deferred'

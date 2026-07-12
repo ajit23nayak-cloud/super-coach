@@ -9,6 +9,12 @@ export const append = internalMutation({
   },
   handler: async (ctx, args) => {
     if (!args.agent.trim() || args.agent.length > 64) throw new Error('Agent must be 1-64 characters')
+    if (args.error && args.error.length > 2000) throw new Error('Error must be at most 2000 characters')
+    for (const value of [args.input, args.output]) {
+      if (value !== undefined && JSON.stringify(value).length > 50_000) {
+        throw new Error('Run payload must be at most 50000 characters')
+      }
+    }
     return ctx.db.insert('agentRuns', { createdAt: Date.now(), ...args })
   },
 })

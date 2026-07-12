@@ -18,9 +18,15 @@ async function secretMatches(supplied: string | null, expected: string | undefin
   return difference === 0
 }
 
-async function authorized(request: Request, envName: 'HEALTH_WEBHOOK_SECRET' | 'SUPER_COACH_DATA_SECRET') {
+async function authorized(
+  request: Request,
+  envName: 'HEALTH_WEBHOOK_SECRET' | 'SUPER_COACH_DATA_SECRET',
+  allowQuerySecret = false,
+) {
   const url = new URL(request.url)
-  const supplied = request.headers.get('x-webhook-secret') ?? request.headers.get('authorization')?.replace(/^Bearer /, '') ?? url.searchParams.get('secret')
+  const supplied = request.headers.get('x-webhook-secret')
+    ?? request.headers.get('authorization')?.replace(/^Bearer /, '')
+    ?? (allowQuerySecret ? url.searchParams.get('secret') : null)
   return secretMatches(supplied, process.env[envName])
 }
 
@@ -28,7 +34,7 @@ http.route({
   path: '/health',
   method: 'POST',
   handler: httpAction(async (ctx, request) => {
-    if (!(await authorized(request, 'HEALTH_WEBHOOK_SECRET'))) {
+    if (!(await authorized(request, 'HEALTH_WEBHOOK_SECRET', true))) {
       return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
     }
     const contentLength = Number(request.headers.get('content-length') ?? 0)
@@ -72,6 +78,38 @@ http.route({
     }
     const input = await request.json()
     const id = await ctx.runMutation(internal.decisions.create, input)
+    return Response.json({ id })
+  }),
+})
+
+http.route({
+  path: '/data/runs',
+  method: 'GET',
+  handler: httpAction(async (ctx, request) => {
+    if (!(await authorized(request, 'SUPER_COACH_DATA_SECRET'))) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const limit = Number(new URL(request.url).searchParams.get('limit') ?? 50)
+    const rows = await ctx.runQuery(internal.agentRuns.list, { limit })
+    return Response.json(rows.map(row => ({
+      _id: row._id,
+      agent: row.agent,
+      createdAt: row.createdAt,
+      latencyMs: row.latencyMs,
+      status: row.status,
+    })))
+  }),
+})
+
+http.route({
+  path: '/data/runs',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    if (!(await authorized(request, 'SUPER_COACH_DATA_SECRET'))) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const input = await request.json()
+    const id = await ctx.runMutation(internal.agentRuns.append, input)
     return Response.json({ id })
   }),
 })
