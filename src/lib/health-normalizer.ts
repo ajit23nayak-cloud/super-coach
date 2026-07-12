@@ -8,11 +8,18 @@ export interface Metric {
   at: string | null
 }
 
+export interface StepInterval {
+  count: number
+  start: string
+  at: string
+}
+
 export interface HealthSnapshot {
   hr: Metric | null
   hrv: Metric | null
   rhr: Metric | null
   sleep: { durationMinutes: number | null; score: number | null; at: string | null }
+  steps: StepInterval | null
   receivedAt: number | null
 }
 
@@ -74,8 +81,25 @@ function sleepSnapshot(payload: RecordLike): HealthSnapshot['sleep'] {
 }
 
 function hasHealthData(payload: RecordLike): boolean {
-  return ['heart_rate', 'resting_heart_rate', 'heart_rate_variability_rmssd', 'hrv', 'sleep']
-    .some(key => records(payload, key).length > 0)
+  return [
+    'heart_rate',
+    'resting_heart_rate',
+    'heart_rate_variability',
+    'heart_rate_variability_rmssd',
+    'hrv',
+    'sleep',
+    'steps',
+  ].some(key => records(payload, key).length > 0)
+}
+
+function latestStepInterval(items: RecordLike[]): StepInterval | null {
+  const intervals = items.flatMap(item => {
+    const count = number(item.count)
+    const start = time(item.start_time)
+    const at = time(item.end_time)
+    return count === null || start === null || at === null ? [] : [{ count, start, at }]
+  })
+  return intervals.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null
 }
 
 export function normalizeHealthReadings(rows: HealthReadingRow[]): HealthSnapshot {
@@ -91,6 +115,7 @@ export function normalizeHealthReadings(rows: HealthReadingRow[]): HealthSnapsho
       hrv: null,
       rhr: null,
       sleep: { durationMinutes: null, score: null, at: null },
+      steps: null,
       receivedAt: null,
     }
   }
@@ -99,10 +124,11 @@ export function normalizeHealthReadings(rows: HealthReadingRow[]): HealthSnapsho
   const rhr = latestMetric(usable.flatMap(entry => records(entry.payload, 'resting_heart_rate')), ['bpm', 'beatsPerMinute'])
   const hrv = latestMetric(
     usable.flatMap(entry => [
+      ...records(entry.payload, 'heart_rate_variability'),
       ...records(entry.payload, 'heart_rate_variability_rmssd'),
       ...records(entry.payload, 'hrv'),
     ]),
-    ['millis', 'value', 'rmssd', 'heartRateVariabilityMillis'],
+    ['rmssd_millis', 'millis', 'value', 'rmssd', 'heartRateVariabilityMillis'],
   )
 
   const sleepCandidates = usable
@@ -114,5 +140,7 @@ export function normalizeHealthReadings(rows: HealthReadingRow[]): HealthSnapsho
     .sort((a, b) => (b.durationMinutes ?? 0) - (a.durationMinutes ?? 0))[0]
     ?? { durationMinutes: null, score: null, at: null }
 
-  return { hr, hrv, rhr, sleep, receivedAt: newest.row.receivedAt }
+  const steps = latestStepInterval(usable.flatMap(entry => records(entry.payload, 'steps')))
+
+  return { hr, hrv, rhr, sleep, steps, receivedAt: newest.row.receivedAt }
 }

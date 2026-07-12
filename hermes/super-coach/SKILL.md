@@ -46,9 +46,9 @@ Normalize the first non-whitespace token case-insensitively. Route `Home` and `ð
 ## Body mode
 
 1. Query real Convex `healthReadings`. In scheduled or delegated read-only runs, use `npx convex data healthReadings --deployment accomplished-moose-243 --limit 20 --format json` from the Super Coach repository; do not read `.env.local`, request secrets, or call the authenticated HTTP endpoint from a leaf sub-agent. Interactive product requests may use the authenticated server data path. Read a recent row window, not only the newest row: webhook syncs may append cumulative snapshots, partial sleep snapshots, or non-health verification rows.
-2. Normalize across usable rows: take the latest timestamped HR/HRV/RHR values, cluster sleep segments without crossing nights, and prefer the most complete snapshot near the latest sleep end. Report the actual numbers, each labeled and dated. If a field is null in Convex, say "no reading" â€” never fill in a plausible number.
-3. Name one plain-language observation grounded in the numbers ("HRV 42 is 12 below your 7-day median of 54"). Then give ONE concrete, doable action for the next 12 hours.
-4. Done when: the user sees today's real numbers, one grounded observation, one specific action.
+2. Normalize across usable rows: take the latest timestamped HR/HRV/RHR values, then cluster sleep segments into contiguous nightly sessions and prefer the most complete cluster near the latest sleep end. A cumulative payload can contain segments from multiple nights: never sum the entire `sleep` array. Split clusters at a clear daytime gap, select the latest cluster, and report its start, end, and summed duration. For steps, select the latest valid cumulative interval by `end_time`; never sum duplicate webhook snapshots. Label each metric with its measurement time in IST and show sync time separately. If a field is null in Convex, say "no reading" â€” never fill in a plausible number.
+3. Produce at least THREE distinct recommendations when enough evidence exists. Each must cite a metric, target, timestamp, or explicit evidence gap and cover different dimensions such as movement, recovery/sleep, cardiovascular context, or data quality. Include progress against Ajit's 10,000-step daily goal: current steps, percent complete, remaining steps, and a pace implication only when time evidence supports it.
+4. Done when: the user sees today's real numbers, progress to the step goal, one grounded observation, and at least three non-duplicative recommendations. If evidence is sparse, one recommendation may restore measurement quality, but label it as a data action rather than a health conclusion.
 
 If Convex returns zero rows or the endpoint errors, say so explicitly ("No ring data since <last timestamp>") and stop â€” do not synthesize a coaching line.
 
@@ -96,7 +96,7 @@ Super orchestrates. It does not read Gmail, Convex, or run check-ins directly â€
 
    ```
    delegate_task(tasks=[
-     {"goal": "Body sub-agent: from C:/Users/ajit2/Ajit/super-coach run `npx convex data healthReadings --deployment accomplished-moose-243 --limit 20 --format json`; extract today's HR, HRV, RHR, sleep and trailing context. Return JSON: {numbers, trend, one_observation}.",
+     {"goal": "Body sub-agent: from C:/Users/ajit2/Ajit/super-coach run `npx convex data healthReadings --deployment accomplished-moose-243 --limit 20 --format json`; extract today's metrics, dated context, progress toward 10,000 steps, keywords, and at least three metric-grounded recommendations.",
       "context": "Use the super-coach skill's Body mode. Real Convex only, no invention. Do not read secret files or use the authenticated HTTP endpoint."},
      {"goal": "Mind sub-agent: from C:/Users/ajit2/Ajit/super-coach run `npx convex data decisions --deployment accomplished-moose-243 --limit 20 --format json`; return JSON: {open_decisions, hedge_streak_days, dominant_state}.",
       "context": "Use the super-coach skill's Mind mode read path. Do not run a fresh check-in, request secrets, or use the authenticated HTTP endpoint."},
