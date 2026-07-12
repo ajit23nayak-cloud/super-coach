@@ -15,7 +15,9 @@ metadata:
 
 Super Coach is a four-mode Telegram coach for Ajit: **Body, Mind, Career, Super**. The Telegram menu is a `ReplyKeyboardMarkup` posted by `scripts/send_telegram_menu.py`, so button taps arrive as ordinary user text ("Body" / "Mind" / "Career" / "Super") into the existing Hermes gateway session — no callback data, no bespoke webhook, no gateway config to change. This skill tells the agent what to do when one of those four words is the first token of a user message.
 
-State lives in Convex (project `accomplished-moose-243`): `healthReadings` (Gabit ring auto-synced via Health Connect), `decisions` (Mind writes; Super and Career read).
+State lives in Convex (project `accomplished-moose-243`): `healthReadings` (Gabit ring auto-synced via Health Connect), `decisions` (Mind writes; Super and Career read), and `agentRuns` (delegation observability).
+
+For secure Convex boundaries, partial health-snapshot normalization, privacy-safe run traces, Gmail reply hardening, evaluation labeling, and non-destructive Git reconciliation, read `references/secure-control-surface.md` before changing the control surface or deployment architecture.
 
 ## When to Use
 
@@ -36,8 +38,8 @@ Read the mode from the first non-whitespace token, case-insensitive. Route once 
 
 ## Body mode
 
-1. Query real Convex `healthReadings` via the Convex client (do not vision-read a screenshot unless the sync is broken and the user confirms fallback). Pull the most recent HR, HRV, RHR, and sleep-score row plus the trailing 7-day window.
-2. Report the actual numbers, each labeled and dated. If a field is null in Convex, say "no reading" — never fill in a plausible number.
+1. Query real Convex `healthReadings`. In scheduled or delegated read-only runs, use `npx convex data healthReadings --deployment accomplished-moose-243 --limit 20 --format json` from the Super Coach repository; do not read `.env.local`, request secrets, or call the authenticated HTTP endpoint from a leaf sub-agent. Interactive product requests may use the authenticated server data path. Read a recent row window, not only the newest row: webhook syncs may append cumulative snapshots, partial sleep snapshots, or non-health verification rows.
+2. Normalize across usable rows: take the latest timestamped HR/HRV/RHR values, cluster sleep segments without crossing nights, and prefer the most complete snapshot near the latest sleep end. Report the actual numbers, each labeled and dated. If a field is null in Convex, say "no reading" — never fill in a plausible number.
 3. Name one plain-language observation grounded in the numbers ("HRV 42 is 12 below your 7-day median of 54"). Then give ONE concrete, doable action for the next 12 hours.
 4. Done when: the user sees today's real numbers, one grounded observation, one specific action.
 
@@ -46,6 +48,7 @@ If Convex returns zero rows or the endpoint errors, say so explicitly ("No ring 
 ## Mind mode
 
 1. Open with: `How do you feel right now? Want to check in, or log a decision?`
+   - Scheduled or delegated read-only runs must read history with `npx convex data decisions --deployment accomplished-moose-243 --limit 20 --format json` from the Super Coach repository. Do not read `.env.local`, request secrets, or use the authenticated HTTP endpoint from a leaf sub-agent.
 2. **Check-in path** — ask these two questions, in order, one per turn:
    1. State-and-self: "In a word, what state are you in, and which version of you is running today: operator, athlete, father, or writer?"
    2. Ship-and-decide: "What is the one thing you'll ship today — not plan, ship — and the decision you've been hedging that you'll make now?"
@@ -71,7 +74,7 @@ Two hats: Chief of Staff and career coach. Both hats require these two skills lo
 Workflow:
 
 1. Sweep: read unread + last-24h Gmail threads and the next 72h of Calendar via `google-workspace`. Cross-reference open rows in Convex `decisions` so any hedged decision keeps surfacing.
-2. Proactively flag what needs attention: stalled threads, conflicts, missing prep, opportunities Ajit would let slide. Ground each flag in the actual message ID or event ID.
+2. Proactively flag what needs attention: stalled threads, conflicts, missing prep, opportunities Ajit would let slide. Ground each flag in the actual message ID or event ID. An unsent Gmail draft is not an external promise or overdue commitment because the recipient has not seen it; label it only as unfinished draft work unless a sent message independently establishes the commitment.
 3. When a reply is warranted, DRAFT ONLY, using `draft-in-ajit-voice`. Save it through the product's tested Career draft endpoint when available; otherwise present the draft text and stop. Return the draft body with the source message ID.
 4. **Confirm-before-send rule.** Never call `google-workspace` send / update / move / delete operations until the user replies with an explicit confirmation ("send it", "yes send", "go", "do it"). Silence or an ambiguous reply is NOT confirmation. On confirmation, execute exactly the one action just confirmed — no bundling.
 5. Career coach hat: after Chief-of-Staff sweep, add exactly ONE strategic line — where time is leaking, which relationship to invest in, which meeting to kill, which follow-up is costing him. Ground it in the sweep evidence.
@@ -86,10 +89,10 @@ Super orchestrates. It does not read Gmail, Convex, or run check-ins directly �
 
    ```
    delegate_task(tasks=[
-     {"goal": "Body sub-agent: pull today's Convex healthReadings (HR, HRV, RHR, sleep) + 7-day trend. Return JSON: {numbers, trend, one_observation}.",
-      "context": "Use the super-coach skill's Body mode. Real Convex only, no invention."},
-     {"goal": "Mind sub-agent: read the last 7 days of Convex `decisions` rows. Return JSON: {open_decisions, hedge_streak_days, dominant_state}.",
-      "context": "Use the super-coach skill's Mind mode read path. Do not run a fresh check-in — read only."},
+     {"goal": "Body sub-agent: from C:/Users/ajit2/Ajit/super-coach run `npx convex data healthReadings --deployment accomplished-moose-243 --limit 20 --format json`; extract today's HR, HRV, RHR, sleep and trailing context. Return JSON: {numbers, trend, one_observation}.",
+      "context": "Use the super-coach skill's Body mode. Real Convex only, no invention. Do not read secret files or use the authenticated HTTP endpoint."},
+     {"goal": "Mind sub-agent: from C:/Users/ajit2/Ajit/super-coach run `npx convex data decisions --deployment accomplished-moose-243 --limit 20 --format json`; return JSON: {open_decisions, hedge_streak_days, dominant_state}.",
+      "context": "Use the super-coach skill's Mind mode read path. Do not run a fresh check-in, request secrets, or use the authenticated HTTP endpoint."},
      {"goal": "Career sub-agent: sweep unread + 24h Gmail and next 72h Calendar via google-workspace. Return JSON: {stalled_threads[], conflicts[], overdue_promises[], one_leverage_line}.",
       "context": "Use the super-coach skill's Career mode Chief-of-Staff sweep. DRAFT ONLY, do not send anything."}
    ])
