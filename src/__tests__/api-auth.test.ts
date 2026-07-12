@@ -4,8 +4,9 @@ import { authorizeApiRequest } from '@/lib/api-auth'
 afterEach(() => vi.unstubAllEnvs())
 
 describe('authorizeApiRequest', () => {
-  it('allows loopback requests during local development', () => {
+  it('allows loopback requests during local development when explicitly enabled', () => {
     vi.stubEnv('NODE_ENV', 'development')
+    vi.stubEnv('SUPER_COACH_DEV_LOOPBACK_BYPASS', '1')
     expect(authorizeApiRequest(new Request('http://127.0.0.1:3000/api/body'))).toBeNull()
   })
 

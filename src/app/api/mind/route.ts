@@ -1,23 +1,15 @@
-import { ConvexHttpClient } from 'convex/browser'
-import { api } from '../../../../convex/_generated/api'
 import { authorizeApiRequest } from '@/lib/api-auth'
+import { createDecision, getDecisions } from '@/lib/convex-data'
 import { detectCrisis, validateDecisionInput } from '@/lib/mind'
 
 export const dynamic = 'force-dynamic'
-
-function client(): ConvexHttpClient {
-  const url = process.env.NEXT_PUBLIC_CONVEX_URL
-  if (!url) throw new Error('NEXT_PUBLIC_CONVEX_URL is not configured')
-  return new ConvexHttpClient(url)
-}
 
 export async function GET(request: Request): Promise<Response> {
   const unauthorized = authorizeApiRequest(request)
   if (unauthorized) return unauthorized
 
   try {
-    const decisions = await client().query(api.decisions.list, { limit: 20 })
-    return Response.json({ decisions })
+    return Response.json({ decisions: await getDecisions(20) })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     return Response.json({ error: message }, { status: 500 })
@@ -42,7 +34,7 @@ export async function POST(request: Request): Promise<Response> {
     : input
 
   try {
-    const id = await client().mutation(api.decisions.create, toStore)
+    const id = await createDecision(toStore)
     return Response.json({ id, decision: toStore, handoff })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'

@@ -1,27 +1,78 @@
 import { httpRouter } from 'convex/server'
 import { httpAction } from './_generated/server'
-import { api } from './_generated/api'
+import { internal } from './_generated/api'
 
 const http = httpRouter()
+const encoder = new TextEncoder()
+
+async function secretMatches(supplied: string | null, expected: string | undefined): Promise<boolean> {
+  if (!supplied || !expected) return false
+  const [left, right] = await Promise.all([
+    crypto.subtle.digest('SHA-256', encoder.encode(supplied)),
+    crypto.subtle.digest('SHA-256', encoder.encode(expected)),
+  ])
+  const a = new Uint8Array(left)
+  const b = new Uint8Array(right)
+  let difference = 0
+  for (let i = 0; i < a.length; i += 1) difference |= a[i] ^ b[i]
+  return difference === 0
+}
+
+async function authorized(request: Request, envName: 'HEALTH_WEBHOOK_SECRET' | 'SUPER_COACH_DATA_SECRET') {
+  const url = new URL(request.url)
+  const supplied = request.headers.get('x-webhook-secret') ?? request.headers.get('authorization')?.replace(/^Bearer /, '') ?? url.searchParams.get('secret')
+  return secretMatches(supplied, process.env[envName])
+}
 
 http.route({
   path: '/health',
   method: 'POST',
   handler: httpAction(async (ctx, request) => {
-    const expected = process.env.HEALTH_WEBHOOK_SECRET
-    const url = new URL(request.url)
-    const supplied = request.headers.get('x-webhook-secret') ?? url.searchParams.get('secret')
-
-    if (!expected) {
-      return Response.json({ ok: false, error: 'Webhook authentication is not configured' }, { status: 503 })
-    }
-    if (!supplied || supplied !== expected) {
+    if (!(await authorized(request, 'HEALTH_WEBHOOK_SECRET'))) {
       return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
     }
-
+    const contentLength = Number(request.headers.get('content-length') ?? 0)
+    if (contentLength > 1_000_000) return Response.json({ ok: false, error: 'Payload too large' }, { status: 413 })
     const payload = await request.json()
-    await ctx.runMutation(api.health.record, { payload })
+    await ctx.runMutation(internal.health.record, { payload })
     return Response.json({ ok: true })
+  }),
+})
+
+http.route({
+  path: '/data/health',
+  method: 'GET',
+  handler: httpAction(async (ctx, request) => {
+    if (!(await authorized(request, 'SUPER_COACH_DATA_SECRET'))) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const limit = Number(new URL(request.url).searchParams.get('limit') ?? 20)
+    return Response.json(await ctx.runQuery(internal.health.recent, { limit }))
+  }),
+})
+
+http.route({
+  path: '/data/decisions',
+  method: 'GET',
+  handler: httpAction(async (ctx, request) => {
+    if (!(await authorized(request, 'SUPER_COACH_DATA_SECRET'))) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const limit = Number(new URL(request.url).searchParams.get('limit') ?? 20)
+    return Response.json(await ctx.runQuery(internal.decisions.list, { limit }))
+  }),
+})
+
+http.route({
+  path: '/data/decisions',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    if (!(await authorized(request, 'SUPER_COACH_DATA_SECRET'))) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const input = await request.json()
+    const id = await ctx.runMutation(internal.decisions.create, input)
+    return Response.json({ id })
   }),
 })
 

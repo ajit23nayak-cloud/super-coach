@@ -1,9 +1,9 @@
-import { mutation, query } from './_generated/server'
+import { internalMutation, internalQuery } from './_generated/server'
 import { v } from 'convex/values'
 
 const status = v.union(v.literal('open'), v.literal('made'), v.literal('deferred'))
 
-export const create = mutation({
+export const create = internalMutation({
   args: {
     decision: v.string(),
     status,
@@ -12,7 +12,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const decision = args.decision.trim()
-    if (!decision) throw new Error('Decision is required')
+    if (!decision || decision.length > 2000) throw new Error('Decision must be 1-2000 characters')
     return ctx.db.insert('decisions', {
       createdAt: Date.now(),
       mode: 'Mind',
@@ -24,7 +24,7 @@ export const create = mutation({
   },
 })
 
-export const list = query({
+export const list = internalQuery({
   args: { status: v.optional(status), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const limit = Math.min(Math.max(Math.trunc(args.limit ?? 20), 1), 100)
@@ -35,14 +35,12 @@ export const list = query({
   },
 })
 
-export const update = mutation({
-  args: {
-    id: v.id('decisions'),
-    status,
-    outcome: v.optional(v.string()),
-  },
+export const update = internalMutation({
+  args: { id: v.id('decisions'), status, outcome: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.id, { status: args.status, outcome: args.outcome })
+    const patch: { status: typeof args.status; outcome?: string } = { status: args.status }
+    if (args.outcome !== undefined) patch.outcome = args.outcome
+    await ctx.db.patch(args.id, patch)
     return args.id
   },
 })

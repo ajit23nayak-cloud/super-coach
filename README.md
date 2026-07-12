@@ -30,14 +30,17 @@ Google Workspace OAuth is read server-side from the active Hermes profile's `goo
 
 Copy `.env.example` to `.env.local` and configure:
 
-- `SUPER_COACH_API_TOKEN`: required as `Authorization: Bearer ...` by every `/api/*` route outside local development.
-- `NEXT_PUBLIC_CONVEX_URL`: created by `npx convex dev`.
+- `SUPER_COACH_DEV_LOOPBACK_BYPASS=1`: explicit local-only bypass for `localhost` and `127.0.0.1`; never enable in production.
+- `SUPER_COACH_API_TOKEN`: required as `Authorization: Bearer ...` by every `/api/*` route outside explicitly enabled local development.
+- `SUPER_COACH_DATA_SECRET`: shared only between the Next.js server and authenticated Convex HTTP actions.
+- `NEXT_PUBLIC_CONVEX_URL` / `NEXT_PUBLIC_CONVEX_SITE_URL`: created by `npx convex dev`.
 
 Set this separately in the Convex environment:
 
+- `SUPER_COACH_DATA_SECRET`: must match the server-side value.
 - `HEALTH_WEBHOOK_SECRET`: required by `POST /health` through `X-Webhook-Secret` or the `?secret=` compatibility parameter.
 
-Do not deploy the authenticated webhook change until the Health Connect webhook sender has the same secret configured.
+The Health Connect webhook sender must use the same secret-bearing URL before authenticated functions are deployed.
 
 ## Telegram control bundle
 

@@ -9,7 +9,8 @@ function equalSecret(a: string, b: string): boolean {
 export function authorizeApiRequest(request: Request): Response | null {
   const hostname = new URL(request.url).hostname
   const isLoopback = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
-  if (process.env.NODE_ENV !== 'production' && isLoopback) return null
+  const localBypassEnabled = process.env.SUPER_COACH_DEV_LOOPBACK_BYPASS === '1'
+  if (process.env.NODE_ENV !== 'production' && localBypassEnabled && isLoopback) return null
 
   const expected = process.env.SUPER_COACH_API_TOKEN
   const authorization = request.headers.get('authorization') ?? ''

@@ -66,6 +66,12 @@ export async function getMessage(id: string): Promise<GmailMessage> {
   return res.json() as Promise<GmailMessage>
 }
 
+function sanitizeHeader(value: string, name: string, required = false): string {
+  const sanitized = value.replace(/[\r\n]+/g, ' ').trim()
+  if (required && !sanitized) throw new Error(`${name} header is missing`)
+  return sanitized
+}
+
 function buildRawMime(params: {
   to: string
   subject: string
@@ -73,22 +79,26 @@ function buildRawMime(params: {
   inReplyTo: string
   references: string
 }): string {
-  const subject = params.subject.startsWith('Re: ')
-    ? params.subject
-    : `Re: ${params.subject}`
+  const cleanTo = sanitizeHeader(params.to, 'To', true)
+  const cleanSubject = sanitizeHeader(params.subject, 'Subject')
+  const subject = cleanSubject.toLowerCase().startsWith('re:')
+    ? cleanSubject
+    : `Re: ${cleanSubject}`
+  const inReplyTo = sanitizeHeader(params.inReplyTo, 'In-Reply-To')
+  const references = sanitizeHeader(params.references, 'References')
 
   const lines: string[] = [
-    `To: ${params.to}`,
+    `To: ${cleanTo}`,
     `Subject: ${subject}`,
     `Content-Type: text/plain; charset=utf-8`,
     `MIME-Version: 1.0`,
   ]
 
-  if (params.inReplyTo) {
-    lines.push(`In-Reply-To: ${params.inReplyTo}`)
-    const refs = params.references
-      ? `${params.references} ${params.inReplyTo}`
-      : params.inReplyTo
+  if (inReplyTo) {
+    lines.push(`In-Reply-To: ${inReplyTo}`)
+    const refs = references
+      ? `${references} ${inReplyTo}`
+      : inReplyTo
     lines.push(`References: ${refs}`)
   }
 

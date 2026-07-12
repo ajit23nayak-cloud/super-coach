@@ -103,6 +103,35 @@ describe('createDraftReply', () => {
     expect(body.message.threadId).toBe(THREAD_ID)
   })
 
+  it('strips CRLF header injection from reply metadata', async () => {
+    const malicious = {
+      ...MOCK_MESSAGE,
+      payload: {
+        ...MOCK_MESSAGE.payload,
+        headers: MOCK_MESSAGE.payload.headers.map(h =>
+          h.name === 'Reply-To'
+            ? { ...h, value: 'reply@example.com\r\nBcc: attacker@example.com' }
+            : h.name === 'Subject'
+              ? { ...h, value: 'Report\r\nX-Injected: yes' }
+              : h,
+        ),
+      },
+    }
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce({ ok: true, json: async () => malicious } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 'draft-safe', message: { threadId: THREAD_ID } }),
+      } as unknown as Response)
+
+    const { createDraftReply } = await import('@/lib/gmail')
+    await createDraftReply('msg-001', 'Safe body')
+    const [, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1]
+    const raw = Buffer.from(JSON.parse(init.body as string).message.raw, 'base64url').toString('utf-8')
+    expect(raw).not.toMatch(/\r?\nBcc:/)
+    expect(raw).not.toMatch(/\r?\nX-Injected:/)
+  })
+
   it('does not double-prefix Re: when subject already starts with Re:', async () => {
     const reMsg = {
       ...MOCK_MESSAGE,

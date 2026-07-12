@@ -2,11 +2,6 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-  // Scaffold table from Create Next App. Harmless, kept so the copy does not drop it.
-  testPings: defineTable({
-    message: v.string(),
-    timestamp: v.number(),
-  }),
   // Health pipe: Gabit ring -> Health Connect -> HC Webhook -> /health endpoint (http.ts) -> health.record (health.ts).
   healthReadings: defineTable({
     receivedAt: v.number(),

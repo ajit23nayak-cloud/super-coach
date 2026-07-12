@@ -30,7 +30,7 @@ describe('normalizeHealthReadings', () => {
     expect(snapshot.rhr).toEqual({ value: 53, at: '2026-07-10T18:30:00Z' })
     expect(snapshot.hrv).toEqual({ value: 42.5, at: '2026-07-11T03:20:00Z' })
     expect(snapshot.sleep).toEqual({
-      durationMinutes: 82,
+      durationMinutes: 45,
       score: 78,
       at: '2026-07-11T03:20:00Z',
     })
@@ -43,6 +43,28 @@ describe('normalizeHealthReadings', () => {
       payload: { ...row.payload, heart_rate_variability_rmssd: undefined },
     }
     expect(normalizeHealthReadings([withoutHrv]).hrv).toBeNull()
+  })
+
+  it('prefers the complete recent sleep snapshot over a newer partial payload', () => {
+    const complete = {
+      receivedAt: row.receivedAt,
+      payload: {
+        sleep: [
+          { duration_seconds: 3600, session_end_time: '2026-07-11T01:00:00Z' },
+          { duration_seconds: 3600, session_end_time: '2026-07-11T02:00:00Z' },
+          { duration_seconds: 3600, session_end_time: '2026-07-11T03:00:00Z', score: 80 },
+        ],
+      },
+    }
+    const partial = {
+      receivedAt: row.receivedAt + 1000,
+      payload: { sleep: [{ duration_seconds: 900, session_end_time: '2026-07-11T03:00:00Z' }] },
+    }
+    const verification = { receivedAt: row.receivedAt + 2000, payload: { test: true } }
+    const snapshot = normalizeHealthReadings([complete, partial, verification])
+    expect(snapshot.sleep.durationMinutes).toBe(180)
+    expect(snapshot.sleep.score).toBe(80)
+    expect(snapshot.receivedAt).toBe(partial.receivedAt)
   })
 
   it('uses the newest row and safely handles empty input', () => {

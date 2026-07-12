@@ -68,11 +68,16 @@ async function refresh(token: GoogleToken): Promise<GoogleToken> {
     throw new Error(`Token refresh failed (${res.status}): ${text}`)
   }
 
-  const data = (await res.json()) as { access_token: string; expires_in: number }
+  const data = (await res.json()) as {
+    access_token: string
+    expires_in: number
+    refresh_token?: string
+  }
   const updated: GoogleToken = {
     ...token,
     access_token: data.access_token,
     token: data.access_token,
+    refresh_token: data.refresh_token ?? token.refresh_token,
     expiry: new Date(Date.now() + data.expires_in * 1000).toISOString(),
   }
 
