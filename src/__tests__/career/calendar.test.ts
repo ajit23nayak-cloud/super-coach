@@ -42,6 +42,28 @@ describe('listUpcomingEvents', () => {
   })
 })
 
+describe('listUpcomingEvents 48h control window', () => {
+  it('passes both timeMin and timeMax to the calendar API when provided', async () => {
+    const fetchMock = vi.mocked(global.fetch)
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ items: [] }),
+    } as unknown as Response)
+
+    const now = new Date('2026-07-12T09:00:00Z')
+    const timeMin = new Date(now.getTime() - 48 * 3_600_000)
+    const timeMax = new Date(now.getTime() + 48 * 3_600_000)
+
+    const { listUpcomingEvents } = await import('@/lib/calendar')
+    await listUpcomingEvents(50, timeMin, timeMax)
+
+    const calledUrl = fetchMock.mock.calls[0][0] as string
+    const parsed = new URL(calledUrl)
+    expect(parsed.searchParams.get('timeMin')).toBe(timeMin.toISOString())
+    expect(parsed.searchParams.get('timeMax')).toBe(timeMax.toISOString())
+  })
+})
+
 describe('detectConflicts', () => {
   it('identifies overlapping events', async () => {
     const { detectConflicts } = await import('@/lib/calendar')

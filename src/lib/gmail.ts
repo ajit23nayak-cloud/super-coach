@@ -22,6 +22,7 @@ export interface MessagePart {
 export interface GmailMessage {
   id: string
   threadId: string
+  labelIds?: string[]
   payload: MessagePart
 }
 
@@ -48,15 +49,45 @@ function header(msg: GmailMessage, name: string): string {
   )
 }
 
-export async function listMessages(maxResults = 20): Promise<MessageSummary[]> {
-  const url = new URL(`${BASE}/messages`)
-  url.searchParams.set('labelIds', 'INBOX')
-  url.searchParams.set('maxResults', String(maxResults))
+export async function listMessages(
+  maxResults = 20,
+  after?: Date,
+  before?: Date,
+  labelId = 'INBOX',
+): Promise<MessageSummary[]> {
+  const qParts: string[] = []
+  if (after) qParts.push(`after:${Math.floor(after.getTime() / 1000)}`)
+  if (before) qParts.push(`before:${Math.floor(before.getTime() / 1000)}`)
+  const q = qParts.join(' ')
 
-  const res = await authedFetch(url.toString())
-  if (!res.ok) throw new Error(`listMessages failed: ${res.status}`)
-  const data = (await res.json()) as { messages?: MessageSummary[] }
-  return data.messages ?? []
+  const results: MessageSummary[] = []
+  let pageToken: string | undefined
+
+  do {
+    const url = new URL(`${BASE}/messages`)
+    url.searchParams.set('labelIds', labelId)
+    const remaining = maxResults - results.length
+    url.searchParams.set('maxResults', String(Math.max(1, Math.min(remaining, 500))))
+    if (q) url.searchParams.set('q', q)
+    if (pageToken) url.searchParams.set('pageToken', pageToken)
+
+    const res = await authedFetch(url.toString())
+    if (!res.ok) throw new Error(`listMessages failed: ${res.status}`)
+    const data = (await res.json()) as {
+      messages?: MessageSummary[]
+      nextPageToken?: string
+    }
+    const page = data.messages ?? []
+    for (const m of page) {
+      results.push(m)
+      if (results.length >= maxResults) break
+    }
+    pageToken = data.nextPageToken
+    if (results.length >= maxResults) break
+    if (page.length === 0) break
+  } while (pageToken)
+
+  return results.slice(0, maxResults)
 }
 
 export async function getMessage(id: string): Promise<GmailMessage> {

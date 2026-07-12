@@ -25,10 +25,12 @@ async function authedFetch(url: string): Promise<Response> {
 export async function listUpcomingEvents(
   maxResults = 20,
   timeMin: Date = new Date(),
+  timeMax?: Date,
 ): Promise<CalendarEvent[]> {
   const url = new URL(`${BASE}/calendars/primary/events`)
   url.searchParams.set('maxResults', String(maxResults))
   url.searchParams.set('timeMin', timeMin.toISOString())
+  if (timeMax) url.searchParams.set('timeMax', timeMax.toISOString())
   url.searchParams.set('singleEvents', 'true')
   url.searchParams.set('orderBy', 'startTime')
 

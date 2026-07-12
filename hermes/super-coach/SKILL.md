@@ -80,8 +80,8 @@ Two hats: Chief of Staff and career coach. Both hats require these two skills lo
 
 Workflow:
 
-1. Sweep: read unread + last-24h Gmail threads and the next 72h of Calendar via `google-workspace`. Cross-reference open rows in Convex `decisions` so any hedged decision keeps surfacing.
-2. Proactively flag what needs attention: stalled threads, conflicts, missing prep, opportunities Ajit would let slide. Ground each flag in the actual message ID or event ID. An unsent Gmail draft is not an external promise or overdue commitment because the recipient has not seen it; label it only as unfinished draft work unless a sent message independently establishes the commitment.
+1. Sweep the prior 48 hours through the next 48 hours in Ajit's local timezone. Query Gmail inbox/unread/sent/drafts across the prior two days, paginate enough that bulk alerts cannot crowd out relationship threads, and deduplicate by message/thread ID. Read Calendar events from two days back through two days forward. Explicitly inspect flights, travel, locations, time-zone changes, transition buffers, preparation needs, conflicts, and post-event follow-ups. Cross-reference open Convex decisions.
+2. Rank surfaced items by urgency, consequence, relationship or strategic value, and reversibility. Proactively flag what needs attention with real message/event IDs. Do not treat all inbox items equally: deep-dive high-consequence topics such as an investor MIS, material operating issue, important relationship, or travel requirement, and contrast them with lower-consequence items such as automated alerts or available credits. When attention allocation is ambiguous, diagnose the tradeoff and ask Ajit which topic to double down on. An unsent draft is unfinished work, never an external promise unless a sent message independently establishes the commitment.
 3. When a reply is warranted, DRAFT ONLY, using `draft-in-ajit-voice`. Save it through the product's tested Career draft endpoint when available; otherwise present the draft text and stop. Return the draft body with the source message ID.
 4. **Confirm-before-send rule.** Never call `google-workspace` send / update / move / delete operations until the user replies with an explicit confirmation ("send it", "yes send", "go", "do it"). Silence or an ambiguous reply is NOT confirmation. On confirmation, execute exactly the one action just confirmed — no bundling.
 5. Career coach hat: after Chief-of-Staff sweep, add exactly ONE strategic line — where time is leaking, which relationship to invest in, which meeting to kill, which follow-up is costing him. Ground it in the sweep evidence.
@@ -100,8 +100,8 @@ Super orchestrates. It does not read Gmail, Convex, or run check-ins directly �
       "context": "Use the super-coach skill's Body mode. Real Convex only, no invention. Do not read secret files or use the authenticated HTTP endpoint."},
      {"goal": "Mind sub-agent: from C:/Users/ajit2/Ajit/super-coach run `npx convex data decisions --deployment accomplished-moose-243 --limit 20 --format json`; return JSON: {open_decisions, hedge_streak_days, dominant_state}.",
       "context": "Use the super-coach skill's Mind mode read path. Do not run a fresh check-in, request secrets, or use the authenticated HTTP endpoint."},
-     {"goal": "Career sub-agent: sweep unread + 24h Gmail and next 72h Calendar via google-workspace. Return JSON: {stalled_threads[], conflicts[], overdue_promises[], one_leverage_line}.",
-      "context": "Use the super-coach skill's Career mode Chief-of-Staff sweep. DRAFT ONLY, do not send anything."}
+     {"goal": "Career sub-agent: sweep Gmail across the prior 48 hours and Calendar from two days back through two days forward; rank travel, commitments, conflicts, critical topics, and opportunities by importance; return keywords, evidence IDs, and one attention-allocation choice.",
+      "context": "Use the super-coach skill's Career mode. DRAFT ONLY, do not send or modify anything. Flights and high-consequence topics such as MIS must not be crowded out by alerts or credits."}
    ])
    ```
 

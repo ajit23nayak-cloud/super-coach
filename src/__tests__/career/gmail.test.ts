@@ -54,6 +54,79 @@ describe('listMessages', () => {
   })
 })
 
+describe('listMessages control window and label handling', () => {
+  it('includes both after:<epoch> and before:<epoch> in the q parameter', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({}),
+    } as unknown as Response)
+
+    const after = new Date('2026-07-10T09:00:00Z')
+    const before = new Date('2026-07-12T09:00:00Z')
+    const { listMessages } = await import('@/lib/gmail')
+    await listMessages(20, after, before)
+
+    const url = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string
+    const q = new URL(url).searchParams.get('q') ?? ''
+    expect(q).toContain(`after:${Math.floor(after.getTime() / 1000)}`)
+    expect(q).toContain(`before:${Math.floor(before.getTime() / 1000)}`)
+  })
+
+  it('applies the given labelId instead of the INBOX default', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({}),
+    } as unknown as Response)
+
+    const { listMessages } = await import('@/lib/gmail')
+    await listMessages(50, undefined, undefined, 'SENT')
+
+    const url = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string
+    expect(new URL(url).searchParams.get('labelIds')).toBe('SENT')
+  })
+
+  it('paginates with nextPageToken until exhausted', async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          messages: [{ id: 'a', threadId: 'ta' }],
+          nextPageToken: 'tok1',
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ messages: [{ id: 'b', threadId: 'tb' }] }),
+      } as unknown as Response)
+
+    const { listMessages } = await import('@/lib/gmail')
+    const msgs = await listMessages(100, undefined, undefined, 'SENT')
+
+    expect(msgs.map(m => m.id)).toEqual(['a', 'b'])
+    const url2 = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][0] as string
+    expect(new URL(url2).searchParams.get('pageToken')).toBe('tok1')
+  })
+
+  it('respects the maxResults cap and stops paging early', async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          messages: [
+            { id: 'a', threadId: 't' },
+            { id: 'b', threadId: 't' },
+          ],
+          nextPageToken: 'tok',
+        }),
+      } as unknown as Response)
+
+    const { listMessages } = await import('@/lib/gmail')
+    const msgs = await listMessages(2, undefined, undefined, 'DRAFT')
+    expect(msgs).toHaveLength(2)
+    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1)
+  })
+})
+
 describe('getMessage', () => {
   it('returns full message with headers', async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce({
