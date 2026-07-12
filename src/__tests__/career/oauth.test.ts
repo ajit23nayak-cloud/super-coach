@@ -23,7 +23,9 @@ function mockTokenFile(data: object) {
 }
 
 beforeEach(() => {
+  vi.unstubAllEnvs()
   vi.resetAllMocks()
+  vi.resetModules()
   vi.setSystemTime(new Date(NOW_MS))
 })
 
@@ -73,5 +75,50 @@ describe('getAccessToken', () => {
     vi.resetModules()
     const { getAccessToken } = await import('@/lib/google-auth')
     await expect(getAccessToken()).rejects.toThrow(/google_token/)
+  })
+
+  it('uses complete Cloudflare credentials without reading or writing the local token file', async () => {
+    vi.stubEnv('GOOGLE_CLIENT_ID', 'cloudflare-client-id')
+    vi.stubEnv('GOOGLE_CLIENT_SECRET', 'cloudflare-client-secret')
+    vi.stubEnv('GOOGLE_REFRESH_TOKEN', 'cloudflare-refresh-token')
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'cloudflare-access', expires_in: 3600 }),
+    }) as unknown as typeof fetch
+
+    const { getAccessToken } = await import('@/lib/google-auth')
+
+    await expect(getAccessToken()).resolves.toBe('cloudflare-access')
+    expect(fs.existsSync).not.toHaveBeenCalled()
+    expect(fs.readFileSync).not.toHaveBeenCalled()
+    expect(fs.writeFileSync).not.toHaveBeenCalled()
+  })
+
+  it('reuses a Cloudflare access token until it approaches expiry', async () => {
+    vi.stubEnv('GOOGLE_CLIENT_ID', 'cloudflare-client-id')
+    vi.stubEnv('GOOGLE_CLIENT_SECRET', 'cloudflare-client-secret')
+    vi.stubEnv('GOOGLE_REFRESH_TOKEN', 'cloudflare-refresh-token')
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'cloudflare-access', expires_in: 3600 }),
+    }) as unknown as typeof fetch
+
+    const { getAccessToken } = await import('@/lib/google-auth')
+
+    await expect(getAccessToken()).resolves.toBe('cloudflare-access')
+    await expect(getAccessToken()).resolves.toBe('cloudflare-access')
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed when Cloudflare credentials are only partially configured', async () => {
+    vi.stubEnv('GOOGLE_CLIENT_ID', 'cloudflare-client-id')
+    vi.stubEnv('GOOGLE_CLIENT_SECRET', '')
+    vi.stubEnv('GOOGLE_REFRESH_TOKEN', 'cloudflare-refresh-token')
+
+    const { getAccessToken } = await import('@/lib/google-auth')
+
+    await expect(getAccessToken()).rejects.toThrow('Google OAuth Cloudflare secrets are incomplete')
+    expect(fs.existsSync).not.toHaveBeenCalled()
+    expect(fs.readFileSync).not.toHaveBeenCalled()
   })
 })
