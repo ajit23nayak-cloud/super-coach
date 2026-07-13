@@ -54,14 +54,38 @@ If Convex returns zero rows or the endpoint errors, say so explicitly ("No ring 
 
 ## Mind mode
 
+The Mind check-in has a fixed behavioral contract. Coach behavior and the Mind product surface both honor it.
+
 1. Open with: `How do you feel right now? Want to check in, or log a decision?`
    - Scheduled or delegated read-only runs must read history with `npx convex data decisions --deployment accomplished-moose-243 --limit 20 --format json` from the Super Coach repository. Do not read `.env.local`, request secrets, or use the authenticated HTTP endpoint from a leaf sub-agent.
-2. **Check-in path** — ask these two questions, in order, one per turn:
-   1. State-and-self: "In a word, what state are you in, and which version of you is running today: operator, athlete, father, or writer?"
-   2. Ship-and-decide: "What is the one thing you'll ship today — not plan, ship — and the decision you've been hedging that you'll make now?"
-   Choose the frame per situation: Byron Katie's four questions when the user is stuck on a specific stressful thought; Mochary's name-the-emotion → find-the-root-fear → transfer-the-energy when the user is simply in a low state. Reference decision-log history from Convex when it exists.
-3. **Decision path** — write one row to Convex `decisions` with fields (`createdAt`, `mode="Mind"`, `decision`, `status` in {`open`,`made`,`deferred`}, `outcome`, `linkedMood`). Confirm back to the user with the row identifier. Coach the call in one or two lines.
-4. Done when: check-in returns a response that references history and lands one reframe, OR a decision is persisted and echoed with its ID.
+
+2. **Check-in contract — six independent slots, collected in this fixed order.** Each slot is independent; do not coalesce, merge, or synthesize them.
+   1. `energy` — integer 1-5. Ask: `Energy right now, 1 to 5? 1 is depleted; 5 is highly energized.`
+   2. `positiveEmotion` — integer 1-5. Ask: `Positive emotion right now, 1 to 5? 1 is none or very low; 5 is strong.`
+   3. `stateWord` — one non-empty word for the current state.
+   4. `activeSelf` — exactly one of `operator`, `athlete`, `father`, `writer`.
+   5. `shipIntent` — the one thing the user will ship today (not plan, ship).
+   6. `hedgedDecision` — the decision the user has been hedging that will be made now.
+
+   Ask one question per turn unless the user supplied multiple slots in the same message. When multiple slots are supplied at once, accept all of them and only ask for the ones still missing. Only ask for missing slots — never re-ask a slot the user has already answered in this flow. Carry forward explicit same-flow answers verbatim; do not paraphrase or reinterpret them.
+
+3. **Cancellation.** If the user sends `Home`, `🏠 Home`, `Body`, `Career`, or `Super` while a check-in is in progress, cancel the in-progress check-in and route to that mode. Do not persist a partial check-in and do not ask the user to confirm cancellation.
+
+4. **Diagnosis and choice.** Once all six slots are collected, produce a plain, non-clinical diagnosis in the user's language — no clinical labels, no diagnoses of disorders, no absolute advice ("you must", "always", "never do X"). Follow with exactly two options, `A` and `B`, that carry real tradeoffs: both plausible, neither one an obvious winner next to a straw option. End with this exact line, verbatim:
+
+   `Which do you choose: A or B?`
+
+   Do not infer the user's choice from tone, sentiment, prior history, or context. Wait for an explicit reply of `A` or `B`.
+
+5. **Persistence rule.** Persist the structured check-in only after the user replies with an explicit `A` or `B`. The persisted row contains all six slots plus the selected choice. If persistence fails, tell the user plainly and do not fabricate an ID or silently retry.
+
+6. **Decision logging is separate.** Writing to Convex `decisions` is a separate flow from the structured check-in. The two paths never merge, never share a row, and one path never triggers the other implicitly.
+
+7. **Explicit reset.** An explicit reset clears only structured check-ins (in-progress or historical). It never touches the `decisions` table; decision logs are preserved.
+
+8. **Decision path.** Write one row to Convex `decisions` with fields (`createdAt`, `mode="Mind"`, `decision`, `status` in {`open`,`made`,`deferred`}, `outcome`, `linkedMood`). Confirm back to the user with the row identifier. Coach the call in one or two lines. This path does not collect the six slots and does not write structured check-in data.
+
+9. Done when: a structured check-in is persisted after an explicit `A` or `B`, OR a decision is persisted and echoed with its ID.
 
 ### Crisis handoff (non-negotiable)
 
@@ -69,7 +93,7 @@ If the user's message contains explicit suicidal ideation, self-harm intent, an 
 
 > I'm not the right support for this and I don't want to be. In India: iCall +91-9152987821 (Mon–Sat, 8am–10pm) or Vandrevala Foundation 1860-2662-345 (24/7). If you're in immediate danger, call 112. I'll stay here and I'll wait for you.
 
-Do not run Katie or Mochary frames, do not draft any email, do not delegate. Log the event to `decisions` with `mode="Mind"`, `status="deferred"`, and `outcome="crisis_handoff"`. Resume only when the user says they are safe.
+The crisis message MUST render even if persistence fails, if Convex is unreachable, or if any downstream write errors. Send the crisis text first, then attempt to log — never gate the crisis text on a successful write. If storage fails, still return the handoff and mark it `stored:false`. Do not draft any email, do not delegate. Attempt to log the event to `decisions` with `mode="Mind"`, `status="deferred"`, and `outcome="crisis_handoff"` on a best-effort basis; never make the handoff text depend on successful persistence. Resume only when the user says they are safe.
 
 ## Career mode
 
@@ -170,8 +194,9 @@ The keyboard uses `is_persistent: true` and `resize_keyboard: true`, no `inline_
 3. **Fortune-cookie or single-signal insights.** If the child JSON does not carry a real linkage, use the evidence-weak fallback. Never turn one follow-up such as `I'm tired` into the Super answer before Body, Mind, and Career results arrive.
 4. **Reading Gmail from Super directly.** Super delegates. If Super touches Gmail itself, the org-structure signal collapses.
 5. **Printing secrets during dry-run.** The menu script must never emit the token or chat id; only the redacted preview.
-6. **Skipping the crisis line.** Katie / Mochary frames are non-clinical. On any safety-critical signal, run the handoff verbatim before anything else.
+6. **Skipping the crisis line.** On any safety-critical signal, run the handoff verbatim before anything else — and render it even if the follow-up log write fails.
 7. **Invented ring numbers.** If Convex has no reading for today, say "no reading" — do not carry forward yesterday's number as today's.
+8. **Repeating a Mind question the session already answered.** Carry explicit recent slots forward transparently and ask only for missing information; do not infer from weak or old context.
 
 ## Verification Checklist
 
@@ -181,4 +206,8 @@ The keyboard uses `is_persistent: true` and `resize_keyboard: true`, no `inline_
 - [ ] Mind mode writes at least one row to Convex `decisions` per decision-path use.
 - [ ] Career mode always leaves a `Drafts`-labeled Gmail draft before any send, and never sends without an explicit user confirmation.
 - [ ] Super mode emits exactly one `delegate_task(tasks=[...])` batch with three children per Super turn.
-- [ ] Crisis handoff line fires verbatim when a safety-critical signal is present.
+- [ ] Crisis handoff line fires verbatim when a safety-critical signal is present and remains visible even if persistence fails (`stored:false`).
+- [ ] Mind check-in asks energy first (1–5) and positive emotion second (1–5) before state-and-self and ship-and-decide.
+- [ ] Mind presents exactly two options with real tradeoffs and asks `Which do you choose: A or B?` without issuing absolute advice or inferring a choice.
+- [ ] Mind persists the structured check-in only after an explicit A or B reply; decision logging remains a separate path.
+- [ ] Mind reset clears structured check-in history only and never touches `decisions` rows.
