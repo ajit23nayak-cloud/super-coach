@@ -1,6 +1,14 @@
 'use client'
 
 import { FormEvent, useCallback, useEffect, useState } from 'react'
+import type { ActiveSelf, MindChoiceFrame, SelectedChoice } from '@/lib/mind'
+import {
+  buildDiagnosePayload,
+  buildSelectionPayload,
+  isDiagnoseReady,
+  type DiagnosePayload,
+  type MindFormState,
+} from '@/lib/mind-form'
 
 type Mode = 'Body' | 'Mind' | 'Career' | 'Super'
 type Metric = { value: number; at: string | null } | null
@@ -27,6 +35,35 @@ type CalEvent = { id: string; summary?: string; start: { dateTime?: string; date
 type CareerData = { inboxItems: InboxItem[]; events: CalEvent[]; conflicts: Array<{ a: CalEvent; b: CalEvent }> }
 type AgentRun = { _id: string; agent: string; createdAt: number; latencyMs?: number; status?: string }
 type RunsData = { runs: AgentRun[] }
+type StoredCheckIn = {
+  _id?: string
+  id?: string
+  createdAt?: number
+  energy: number
+  positiveEmotion: number
+  stateWord: string
+  activeSelf: ActiveSelf
+  shipIntent?: string
+  hedgedDecision?: string
+  diagnosis: string
+  choiceA: string
+  choiceB: string
+  selectedChoice: SelectedChoice
+}
+type CheckInsData = { checkIns: StoredCheckIn[] }
+
+const ACTIVE_SELVES: readonly ActiveSelf[] = ['operator', 'athlete', 'father', 'writer']
+const SCORES: readonly number[] = [1, 2, 3, 4, 5]
+const ENERGY_LABELS: Record<number, string> = { 1: 'depleted', 5: 'highly energized' }
+const POSITIVE_LABELS: Record<number, string> = { 1: 'none or very low', 5: 'strong' }
+const EMPTY_FORM: MindFormState = {
+  energy: null,
+  positiveEmotion: null,
+  stateWord: '',
+  activeSelf: null,
+  shipIntent: '',
+  hedgedDecision: '',
+}
 
 const modes: Mode[] = ['Body', 'Mind', 'Career', 'Super']
 
@@ -45,12 +82,29 @@ export default function Home() {
   const [mind, setMind] = useState<MindData | null>(null)
   const [career, setCareer] = useState<CareerData | null>(null)
   const [runs, setRuns] = useState<RunsData | null>(null)
+  const [checkIns, setCheckIns] = useState<StoredCheckIn[]>([])
   const [loading, setLoading] = useState(true)
   const [lastRefreshed, setLastRefreshed] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [decision, setDecision] = useState('')
   const [handoff, setHandoff] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [checkInForm, setCheckInForm] = useState<MindFormState>(EMPTY_FORM)
+  const [frame, setFrame] = useState<MindChoiceFrame | null>(null)
+  const [diagnosedInputs, setDiagnosedInputs] = useState<DiagnosePayload | null>(null)
+  const [checkInHandoff, setCheckInHandoff] = useState<string | null>(null)
+  const [checkInError, setCheckInError] = useState<string | null>(null)
+  const [diagnosing, setDiagnosing] = useState(false)
+  const [committing, setCommitting] = useState<SelectedChoice | null>(null)
+  const [resetting, setResetting] = useState(false)
+
+  const updateForm = useCallback(<K extends keyof MindFormState>(key: K, value: MindFormState[K]) => {
+    setCheckInForm(prev => ({ ...prev, [key]: value }))
+    setFrame(null)
+    setDiagnosedInputs(null)
+    setCheckInHandoff(null)
+    setCheckInError(null)
+  }, [])
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -72,6 +126,17 @@ export default function Home() {
         setRuns(runsResponse.ok ? await runsResponse.json() : { runs: [] })
       } catch {
         setRuns({ runs: [] })
+      }
+      try {
+        const checkInsResponse = await fetch('/api/mind/check-in', { cache: 'no-store' })
+        if (checkInsResponse.ok) {
+          const payload = (await checkInsResponse.json()) as CheckInsData
+          setCheckIns(Array.isArray(payload.checkIns) ? payload.checkIns : [])
+        } else {
+          setCheckIns([])
+        }
+      } catch {
+        setCheckIns([])
       }
       setLastRefreshed(Date.now())
     } catch (caught) {
@@ -110,6 +175,107 @@ export default function Home() {
       setError(caught instanceof Error ? caught.message : 'Decision was not saved')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function diagnose(event: FormEvent) {
+    event.preventDefault()
+    if (!isDiagnoseReady(checkInForm)) return
+    setCheckInError(null)
+    setFrame(null)
+    setCheckInHandoff(null)
+    setDiagnosing(true)
+    try {
+      const payload = buildDiagnosePayload(checkInForm)
+      const response = await fetch('/api/mind/check-in', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = (await response.json()) as {
+        frame?: MindChoiceFrame
+        handoff?: string
+        error?: string
+      }
+      if (!response.ok) throw new Error(data.error ?? 'Check-in was not diagnosed')
+      if (typeof data.handoff === 'string' && data.handoff) {
+        setCheckInHandoff(data.handoff)
+        setFrame(null)
+        setDiagnosedInputs(null)
+        return
+      }
+      if (data.frame) {
+        setFrame(data.frame)
+        setDiagnosedInputs(payload)
+      }
+    } catch (caught) {
+      setCheckInError(caught instanceof Error ? caught.message : 'Check-in was not diagnosed')
+    } finally {
+      setDiagnosing(false)
+    }
+  }
+
+  async function commitChoice(choice: SelectedChoice) {
+    if (!diagnosedInputs) return
+    setCheckInError(null)
+    setCommitting(choice)
+    try {
+      const response = await fetch('/api/mind/check-in', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildSelectionPayload(
+          { ...diagnosedInputs, energy: diagnosedInputs.energy, positiveEmotion: diagnosedInputs.positiveEmotion },
+          choice,
+        )),
+      })
+      const data = (await response.json()) as {
+        stored?: boolean
+        handoff?: string
+        frame?: MindChoiceFrame
+        error?: string
+      }
+      if (!response.ok) throw new Error(data.error ?? 'Check-in was not persisted')
+      if (typeof data.handoff === 'string' && data.handoff) {
+        setCheckInHandoff(data.handoff)
+        setFrame(null)
+        setDiagnosedInputs(null)
+        return
+      }
+      if (data.stored) {
+        setFrame(null)
+        setDiagnosedInputs(null)
+        setCheckInForm(EMPTY_FORM)
+        await refresh()
+      }
+    } catch (caught) {
+      setCheckInError(caught instanceof Error ? caught.message : 'Check-in was not persisted')
+    } finally {
+      setCommitting(null)
+    }
+  }
+
+  async function resetCheckIns() {
+    if (typeof window === 'undefined') return
+    const confirmed = window.confirm('Clear all structured check-ins? Decisions are not affected.')
+    if (!confirmed) return
+    setCheckInError(null)
+    setResetting(true)
+    try {
+      const response = await fetch('/api/mind/check-in', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true }),
+      })
+      const data = (await response.json()) as { error?: string }
+      if (!response.ok) throw new Error(data.error ?? 'Reset failed')
+      setFrame(null)
+      setDiagnosedInputs(null)
+      setCheckInHandoff(null)
+      await refresh()
+    } catch (caught) {
+      setCheckInError(caught instanceof Error ? caught.message : 'Reset failed')
+    } finally {
+      setResetting(false)
     }
   }
 
@@ -157,18 +323,168 @@ export default function Home() {
 
       {active === 'Mind' && (
         <section className="panel" aria-labelledby="mind-title">
-          <div className="panel-heading"><div><p className="kicker">CHECK-IN · DECISION LOG</p><h2 id="mind-title">Mind signal</h2></div><span className="badge">{mind?.decisions.length ?? 0} decisions</span></div>
-          <div className="question-list">
-            <p><span>01</span>In a word, what state are you in, and which version of you is running today: operator, athlete, father, or writer?</p>
-            <p><span>02</span>What is the one thing you will ship today, not plan, ship, and the decision you have been hedging that you will make now?</p>
+          <div className="panel-heading">
+            <div>
+              <p className="kicker">CHECK-IN · DECISION LOG</p>
+              <h2 id="mind-title">Mind signal</h2>
+            </div>
+            <span className="badge">{mind?.decisions.length ?? 0} decisions · {checkIns.length} check-ins</span>
           </div>
+
+          {checkInHandoff ? (
+            <div className="crisis-handoff" role="alert">
+              <strong>Immediate support</strong>
+              <p>{checkInHandoff}</p>
+            </div>
+          ) : (
+            <form className="mind-check-in" onSubmit={diagnose} aria-label="Mind check-in">
+              <ScoreField
+                legend="Energy"
+                helper="1 depleted / 5 highly energized"
+                name="energy"
+                value={checkInForm.energy}
+                onChange={value => updateForm('energy', value)}
+                labels={ENERGY_LABELS}
+              />
+              <ScoreField
+                legend="Positive emotion"
+                helper="1 none or very low / 5 strong"
+                name="positive-emotion"
+                value={checkInForm.positiveEmotion}
+                onChange={value => updateForm('positiveEmotion', value)}
+                labels={POSITIVE_LABELS}
+              />
+              <div className="mind-field">
+                <label htmlFor="state-word">State word</label>
+                <input
+                  id="state-word"
+                  type="text"
+                  value={checkInForm.stateWord}
+                  onChange={event => updateForm('stateWord', event.target.value)}
+                  placeholder="One word for how you feel"
+                  maxLength={500}
+                />
+              </div>
+              <fieldset className="mind-field mind-choice">
+                <legend>Active self</legend>
+                <div className="chip-row" role="radiogroup" aria-label="Active self">
+                  {ACTIVE_SELVES.map(identity => (
+                    <label key={identity} className={`chip ${checkInForm.activeSelf === identity ? 'selected' : ''}`}>
+                      <input
+                        type="radio"
+                        name="active-self"
+                        value={identity}
+                        checked={checkInForm.activeSelf === identity}
+                        onChange={() => updateForm('activeSelf', identity)}
+                      />
+                      <span>{identity}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <div className="mind-field">
+                <label htmlFor="ship-intent">Ship intention</label>
+                <input
+                  id="ship-intent"
+                  type="text"
+                  value={checkInForm.shipIntent}
+                  onChange={event => updateForm('shipIntent', event.target.value)}
+                  placeholder="The one thing you will ship today"
+                  maxLength={500}
+                />
+              </div>
+              <div className="mind-field">
+                <label htmlFor="hedged-decision">Hedged decision</label>
+                <input
+                  id="hedged-decision"
+                  type="text"
+                  value={checkInForm.hedgedDecision}
+                  onChange={event => updateForm('hedgedDecision', event.target.value)}
+                  placeholder="The decision you have been hedging"
+                  maxLength={500}
+                />
+              </div>
+              <div className="mind-actions">
+                <button type="submit" disabled={diagnosing || !isDiagnoseReady(checkInForm)}>
+                  {diagnosing ? 'Diagnosing…' : 'Diagnose'}
+                </button>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => void resetCheckIns()}
+                  disabled={resetting}
+                >
+                  {resetting ? 'Clearing…' : 'Reset check-ins'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {checkInError && <div className="error" role="alert">{checkInError}</div>}
+
+          {!checkInHandoff && frame && (
+            <div className="mind-frame" aria-live="polite">
+              <p className="mind-diagnosis">{frame.diagnosis}</p>
+              <p className="mind-question"><strong>{frame.question}</strong></p>
+              <div className="mind-options">
+                {frame.choices.map(choice => (
+                  <article key={choice.id} className="mind-option">
+                    <span className="mind-option-id">Option {choice.id}</span>
+                    <p className="mind-option-label">{choice.label}</p>
+                    <p className="mind-option-tradeoff"><strong>Tradeoff:</strong> {choice.tradeoff}</p>
+                    <button
+                      type="button"
+                      onClick={() => void commitChoice(choice.id)}
+                      disabled={committing !== null}
+                    >
+                      {committing === choice.id ? 'Saving…' : `Choose ${choice.id}`}
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
+
           <form className="decision-form" onSubmit={saveDecision}>
             <label htmlFor="decision">Log the decision</label>
-            <div><input id="decision" value={decision} onChange={event => setDecision(event.target.value)} placeholder="The decision I will make now" /><button disabled={saving || !decision.trim()}>{saving ? 'Saving…' : 'Save decision'}</button></div>
+            <div>
+              <input id="decision" value={decision} onChange={event => setDecision(event.target.value)} placeholder="The decision I will make now" />
+              <button disabled={saving || !decision.trim()}>{saving ? 'Saving…' : 'Save decision'}</button>
+            </div>
           </form>
           {handoff && <div className="crisis-handoff" role="alert"><strong>Immediate support</strong><p>{handoff}</p></div>}
-          <div className="list">
-            {(mind?.decisions ?? []).slice(0, 5).map(item => <article key={item._id}><span className={`state ${item.status}`}>{item.status}</span><div><strong>{item.decision}</strong><small>{fmtTime(item.createdAt)}{item.linkedMood ? ` · ${item.linkedMood}` : ''}</small></div></article>)}
+
+          <div className="mind-columns">
+            <div>
+              <h3>Decision log</h3>
+              <div className="list">
+                {(mind?.decisions ?? []).slice(0, 5).map(item => (
+                  <article key={item._id}>
+                    <span className={`state ${item.status}`}>{item.status}</span>
+                    <div>
+                      <strong>{item.decision}</strong>
+                      <small>{fmtTime(item.createdAt)}{item.linkedMood ? ` · ${item.linkedMood}` : ''}</small>
+                    </div>
+                  </article>
+                ))}
+                {(mind?.decisions ?? []).length === 0 && <p className="empty">No decisions logged yet.</p>}
+              </div>
+            </div>
+            <div>
+              <h3>Recent check-ins</h3>
+              <div className="list">
+                {checkIns.slice(0, 5).map((item, index) => (
+                  <article key={item._id ?? item.id ?? index}>
+                    <span className="state">{item.selectedChoice}</span>
+                    <div>
+                      <strong>{item.stateWord} · {item.activeSelf} · E{item.energy}/P{item.positiveEmotion}</strong>
+                      <small>{item.createdAt ? fmtTime(item.createdAt) : ''}</small>
+                    </div>
+                  </article>
+                ))}
+                {checkIns.length === 0 && <p className="empty">No check-ins yet.</p>}
+              </div>
+            </div>
           </div>
         </section>
       )}
@@ -215,4 +531,47 @@ function MetricCard({ label, value, at }: { label: string; value: string; at: st
 
 function Ready({ label, ready, detail }: { label: string; ready: boolean; detail: string }) {
   return <article><span className={ready ? 'ready-dot ready' : 'ready-dot'} /><div><strong>{label}</strong><small>{detail}</small></div></article>
+}
+
+function ScoreField({
+  legend,
+  helper,
+  name,
+  value,
+  onChange,
+  labels,
+}: {
+  legend: string
+  helper: string
+  name: string
+  value: number | null
+  onChange: (value: number) => void
+  labels: Record<number, string>
+}) {
+  return (
+    <fieldset className="mind-field mind-score">
+      <legend>{legend}</legend>
+      <p className="mind-helper">{helper}</p>
+      <div className="score-row" role="radiogroup" aria-label={legend}>
+        {SCORES.map(score => {
+          const anchor = labels[score]
+          const optionLabel = anchor ? `${score} ${anchor}` : `${score}`
+          return (
+            <label key={score} className={`score-chip ${value === score ? 'selected' : ''}`}>
+              <input
+                type="radio"
+                name={name}
+                value={score}
+                checked={value === score}
+                onChange={() => onChange(score)}
+                aria-label={optionLabel}
+              />
+              <span className="score-value">{score}</span>
+              {anchor && <span className="score-anchor">{anchor}</span>}
+            </label>
+          )
+        })}
+      </div>
+    </fieldset>
+  )
 }
