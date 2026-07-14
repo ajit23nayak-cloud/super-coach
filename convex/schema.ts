@@ -42,6 +42,23 @@ export default defineSchema({
     .index('by_createdAt', ['createdAt'])
     .index('by_activeSelf', ['activeSelf']),
 
+  // Telegram-produced coaching narratives, one row per mode synthesis.
+  // Web mirrors these so what Ajit hears in Telegram is also visible in the browser.
+  insights: defineTable({
+    createdAt: v.number(),
+    mode: v.union(
+      v.literal('Body'),
+      v.literal('Mind'),
+      v.literal('Career'),
+      v.literal('Super'),
+    ),
+    text: v.string(),
+    sourceRunId: v.optional(v.string()),
+    meta: v.optional(v.any()),
+  })
+    .index('by_createdAt', ['createdAt'])
+    .index('by_mode_createdAt', ['mode', 'createdAt']),
+
   // Observability: per-sub-agent run log (Body/Mind + Super later).
   agentRuns: defineTable({
     createdAt: v.number(),

@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { HealthSnapshot } from '@/lib/health-normalizer'
 import type { BodyAssessment } from '@/lib/body-assessment'
+import type { InsightRow } from '@/lib/convex-data'
 import type {
   AgentRun,
   CalEvent,
@@ -33,6 +34,7 @@ export default function Dashboard({
   checkIns,
   runs,
   career,
+  insights,
   fetchedAt,
 }: {
   body: BodyData
@@ -40,10 +42,21 @@ export default function Dashboard({
   checkIns: StoredCheckIn[]
   runs: AgentRun[]
   career: CareerData
+  insights: InsightRow[]
   fetchedAt: number
 }) {
   const router = useRouter()
   const [active, setActive] = useState<Mode>('Body')
+
+  const latestInsight = useMemo(() => {
+    const byMode: Partial<Record<Mode, InsightRow>> = {}
+    for (const row of insights) {
+      if (!byMode[row.mode] || row.createdAt > byMode[row.mode]!.createdAt) {
+        byMode[row.mode] = row
+      }
+    }
+    return byMode
+  }, [insights])
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -96,6 +109,7 @@ export default function Dashboard({
               at={body.snapshot.sleep.at ?? null}
             />
           </div>
+          <InsightBlock insight={latestInsight.Body} fallback="No Body insight from Telegram yet. Run Body in Telegram to see the coaching narrative here." />
           <div className="coach-line">
             <strong>Coach line</strong>
             <p>
@@ -114,6 +128,7 @@ export default function Dashboard({
             <span className="badge">{decisions.length} decisions · {checkIns.length} check-ins</span>
           </div>
 
+          <InsightBlock insight={latestInsight.Mind} fallback="No Mind insight from Telegram yet. Run Mind in Telegram to see the coaching narrative here." />
           <p className="mind-helper" style={{ marginBottom: 20 }}>
             Interactive check-ins happen in Telegram. This page mirrors what Telegram has written to Convex — new
             entries appear here within seconds.
@@ -160,6 +175,7 @@ export default function Dashboard({
             <div><p className="kicker">GMAIL · CALENDAR</p><h2 id="career-title">Career signal</h2></div>
             <span className="badge">Read-only mirror</span>
           </div>
+          <InsightBlock insight={latestInsight.Career} fallback="No Career insight from Telegram yet. Run Career in Telegram to see the coaching narrative here." />
           <div className="split">
             <div>
               <h3>Inbox requiring review</h3>
@@ -206,6 +222,7 @@ export default function Dashboard({
             <div><p className="kicker">PARALLEL ORCHESTRATION</p><h2 id="super-title">Super mode</h2></div>
             <span className="badge accent">One batch · three agents</span>
           </div>
+          <InsightBlock insight={latestInsight.Super} fallback="No Super insight from Telegram yet. Run Super in Telegram to see the cross-domain synthesis here." />
           <p className="super-copy">
             Super does not summarize each domain independently. It launches Body, Mind, and Career in one parallel
             Hermes delegation batch, waits for all three, and produces a cross-domain insight only when the evidence
@@ -257,5 +274,22 @@ function Ready({ label, ready, detail }: { label: string; ready: boolean; detail
       <span className={ready ? 'ready-dot ready' : 'ready-dot'} />
       <div><strong>{label}</strong><small>{detail}</small></div>
     </article>
+  )
+}
+
+function InsightBlock({ insight, fallback }: { insight: InsightRow | undefined; fallback: string }) {
+  if (!insight) {
+    return (
+      <div className="insight-block insight-empty">
+        <span className="insight-label">Latest from Telegram</span>
+        <p>{fallback}</p>
+      </div>
+    )
+  }
+  return (
+    <div className="insight-block">
+      <span className="insight-label">Latest from Telegram · {fmtTime(insight.createdAt)}</span>
+      <p>{insight.text}</p>
+    </div>
   )
 }

@@ -293,6 +293,50 @@ h3 {
   color: var(--accent);
 }
 
+/* -------- Insight block (Telegram narrative mirror) -------- */
+.insight-block {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 24px;
+  padding: 22px 24px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background:
+    linear-gradient(var(--surface-2), var(--surface-2)) padding-box,
+    var(--grad-primary) border-box;
+  box-shadow: var(--accent-glow);
+}
+.insight-block .insight-label {
+  background: var(--grad-primary);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.insight-block p {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.55;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.insight-block.insight-empty {
+  border: 1px dashed var(--line-strong);
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: none;
+}
+.insight-block.insight-empty .insight-label {
+  background: none;
+  -webkit-text-fill-color: var(--muted);
+  color: var(--muted);
+}
+.insight-block.insight-empty p { color: var(--muted); font-size: 14px; font-weight: 400; }
+
 /* -------- Body metrics -------- */
 .metric-grid {
   display: grid;

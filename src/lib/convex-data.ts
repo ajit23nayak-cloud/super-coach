@@ -116,3 +116,37 @@ export async function createDecision(input: {
   const payload = (await response.json()) as { id: string }
   return payload.id
 }
+
+export type InsightMode = 'Body' | 'Mind' | 'Career' | 'Super'
+
+export interface InsightRow {
+  _id: string
+  createdAt: number
+  mode: InsightMode
+  text: string
+  sourceRunId?: string
+  meta?: unknown
+}
+
+export async function getInsights(limit = 20, mode?: InsightMode): Promise<InsightRow[]> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (mode) params.set('mode', mode)
+  const response = await dataFetch(`/data/insights?${params.toString()}`)
+  if (!response.ok) throw new Error(`Convex insights read failed: ${response.status}`)
+  return response.json() as Promise<InsightRow[]>
+}
+
+export async function createInsight(input: {
+  mode: InsightMode
+  text: string
+  sourceRunId?: string
+  meta?: unknown
+}): Promise<string> {
+  const response = await dataFetch('/data/insights', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) throw new Error(`Convex insight write failed: ${response.status}`)
+  const payload = (await response.json()) as { id: string }
+  return payload.id
+}

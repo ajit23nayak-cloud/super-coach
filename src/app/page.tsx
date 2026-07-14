@@ -2,8 +2,10 @@ import Dashboard from './dashboard'
 import {
   getDecisions,
   getHealthRows,
+  getInsights,
   getMindCheckIns,
   getRuns,
+  type InsightRow,
 } from '@/lib/convex-data'
 import { normalizeHealthReadings } from '@/lib/health-normalizer'
 import { buildBodyAssessment } from '@/lib/body-assessment'
@@ -73,12 +75,13 @@ type EmptyCareer = { inboxItems: []; events: []; conflicts: [] }
 const EMPTY_CAREER: EmptyCareer = { inboxItems: [], events: [], conflicts: [] }
 
 export default async function Home() {
-  const [rows, decisionsRaw, checkInsRaw, runsRaw, careerRaw] = await Promise.all([
+  const [rows, decisionsRaw, checkInsRaw, runsRaw, careerRaw, insightsRaw] = await Promise.all([
     getHealthRows(20).catch(() => [] as Awaited<ReturnType<typeof getHealthRows>>),
     getDecisions(20).catch(() => [] as unknown[]),
     getMindCheckIns(20).catch(() => [] as unknown[]),
     getRuns(50).catch(() => [] as unknown[]),
     getCareerBriefing().catch(() => EMPTY_CAREER),
+    getInsights(40).catch(() => [] as InsightRow[]),
   ])
 
   const snapshot = normalizeHealthReadings(rows)
@@ -91,6 +94,8 @@ export default async function Home() {
       checkIns={checkInsRaw as StoredCheckIn[]}
       runs={runsRaw as AgentRun[]}
       career={careerRaw as CareerData}
+      insights={insightsRaw}
+      // eslint-disable-next-line react-hooks/purity -- server render time is intentionally per-request
       fetchedAt={Date.now()}
     />
   )

@@ -148,6 +148,45 @@ http.route({
 })
 
 http.route({
+  path: '/data/insights',
+  method: 'GET',
+  handler: httpAction(async (ctx, request) => {
+    if (!(await authorized(request, 'SUPER_COACH_DATA_SECRET'))) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const url = new URL(request.url)
+    const limit = Number(url.searchParams.get('limit') ?? 20)
+    const modeParam = url.searchParams.get('mode')
+    if (modeParam === 'Body' || modeParam === 'Mind' || modeParam === 'Career' || modeParam === 'Super') {
+      return Response.json(await ctx.runQuery(internal.insights.listByMode, { mode: modeParam, limit }))
+    }
+    return Response.json(await ctx.runQuery(internal.insights.list, { limit }))
+  }),
+})
+
+http.route({
+  path: '/data/insights',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    if (!(await authorized(request, 'SUPER_COACH_DATA_SECRET'))) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const contentLength = Number(request.headers.get('content-length') ?? 0)
+    if (contentLength > 20_000) {
+      return Response.json({ error: 'Payload too large' }, { status: 413 })
+    }
+    const input = (await request.json()) as {
+      mode: 'Body' | 'Mind' | 'Career' | 'Super'
+      text: string
+      sourceRunId?: string
+      meta?: unknown
+    }
+    const id = await ctx.runMutation(internal.insights.create, input)
+    return Response.json({ id })
+  }),
+})
+
+http.route({
   path: '/data/runs',
   method: 'GET',
   handler: httpAction(async (ctx, request) => {
