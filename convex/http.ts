@@ -105,7 +105,18 @@ http.route({
     if (contentLength > 100_000) {
       return Response.json({ error: 'Payload too large' }, { status: 413 })
     }
-    const input = await request.json()
+    const input = (await request.json()) as {
+      energy: number
+      positiveEmotion: number
+      stateWord: string
+      activeSelf: 'operator' | 'athlete' | 'father' | 'writer'
+      shipIntent?: string
+      hedgedDecision?: string
+      diagnosis: string
+      choiceA: string
+      choiceB: string
+      selectedChoice: 'A' | 'B'
+    }
     const id = await ctx.runMutation(internal.mindCheckIns.create, input)
     return Response.json({ id })
   }),
