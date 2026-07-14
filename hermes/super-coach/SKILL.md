@@ -176,6 +176,25 @@ Super orchestrates. It does not read Gmail, Convex, or run check-ins directly �
 
    If any answer is no, rewrite once. Done when the final synthesis is delivered and Ajit either confirms or declines the decision.
 
+## Insight persistence (web mirror)
+
+Every mode synthesis MUST be persisted to Convex `insights` so the coaching narrative is visible on the web dashboard, not just in Telegram. Without this the web can only show structured records (numeric metrics, decision rows, timestamps) — never the spoken coaching text.
+
+1. **When to write.** Immediately after the final synthesis for a mode, before or in parallel with sending the reply to Telegram. Never gate the Telegram reply on a successful insight write.
+2. **How to write.** POST to `https://accomplished-moose-243.convex.site/data/insights` with `Authorization: Bearer $SUPER_COACH_DATA_SECRET` and JSON body `{mode, text, sourceRunId?, meta?}`.
+   - `mode` — exactly one of `Body`, `Mind`, `Career`, `Super`.
+   - `text` — the same coaching narrative shown to Ajit, 4000 characters max, stripped of IDs and secrets.
+   - `sourceRunId` — the agent run ID that produced it, when known.
+   - `meta` — optional structured context worth mirroring (e.g., dominant constraint, ranked evidence).
+3. **What to persist per mode.**
+   - **Body**: the three metric-grounded recommendations, not the raw metrics.
+   - **Mind**: the diagnosis line plus the two A/B option labels — never the persisted `mindCheckIns` row (that is separate).
+   - **Career**: the ranked flags summary and the attention-allocation choice text.
+   - **Super**: the full `CUMULATIVE INSIGHT / THREE-DOMAIN CHAIN / DOMINANT CONSTRAINT / LEVERAGE POINT / DECISION / CONFIDENCE` block.
+4. **Failure handling.** If the insight write fails (network, 401, 5xx), still deliver the Telegram reply. Log the failure. Do not retry silently and do not fabricate a stored ID.
+5. **Rate limit.** At most one insight per mode per user-turn. Do not double-write when the user asks a clarifying follow-up on the same synthesis.
+6. **Never persist crisis text as an insight.** Crisis handoff still goes to `decisions` with `outcome="crisis_handoff"` — not to `insights`.
+
 ## Menu script (setup)
 
 `scripts/send_telegram_menu.py` posts the persistent 4-button reply keyboard to `TELEGRAM_HOME_CHANNEL`. Stdlib only. Reads `TELEGRAM_BOT_TOKEN` and `TELEGRAM_HOME_CHANNEL` from `$HERMES_HOME/.env`. Always dry-run first:
