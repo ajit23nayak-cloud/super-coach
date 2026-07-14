@@ -60,11 +60,13 @@ export default function Dashboard({
   }, [insights])
 
   useEffect(() => {
+    // Background safety poll only. Reader-driven — user hits "Refresh now" for on-demand sync.
+    const TWO_HOURS_MS = 2 * 60 * 60 * 1000
     const id = window.setInterval(() => {
       if (document.visibilityState === 'visible') {
         startSync(() => router.refresh())
       }
-    }, 4000)
+    }, TWO_HOURS_MS)
     return () => window.clearInterval(id)
   }, [router])
 
@@ -94,7 +96,7 @@ export default function Dashboard({
       <div className="utility-row">
         <p>
           <span className={`sync-dot ${isSyncing ? 'syncing' : ''}`} aria-hidden="true" />
-          {isSyncing ? 'Syncing with Convex…' : `Last refresh ${fmtTime(fetchedAt)} · auto-refresh every 4s`}
+          {isSyncing ? 'Syncing with Convex…' : `Last refresh ${fmtTime(fetchedAt)} · tap Refresh for fresh data`}
         </p>
         <button className="text-button" onClick={() => startSync(() => router.refresh())} disabled={isSyncing}>
           {isSyncing ? 'Syncing…' : 'Refresh now'}
