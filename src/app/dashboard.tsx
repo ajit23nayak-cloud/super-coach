@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import type { HealthSnapshot } from '@/lib/health-normalizer'
 import type { BodyAssessment } from '@/lib/body-assessment'
@@ -47,6 +47,7 @@ export default function Dashboard({
 }) {
   const router = useRouter()
   const [active, setActive] = useState<Mode>('Body')
+  const [isSyncing, startSync] = useTransition()
 
   const latestInsight = useMemo(() => {
     const byMode: Partial<Record<Mode, InsightRow>> = {}
@@ -60,7 +61,9 @@ export default function Dashboard({
 
   useEffect(() => {
     const id = window.setInterval(() => {
-      if (document.visibilityState === 'visible') router.refresh()
+      if (document.visibilityState === 'visible') {
+        startSync(() => router.refresh())
+      }
     }, 4000)
     return () => window.clearInterval(id)
   }, [router])
@@ -89,8 +92,13 @@ export default function Dashboard({
       </nav>
 
       <div className="utility-row">
-        <p>Last refresh {fmtTime(fetchedAt)} · auto-refreshes every 4s</p>
-        <button className="text-button" onClick={() => router.refresh()}>Refresh now</button>
+        <p>
+          <span className={`sync-dot ${isSyncing ? 'syncing' : ''}`} aria-hidden="true" />
+          {isSyncing ? 'Syncing with Convex…' : `Last refresh ${fmtTime(fetchedAt)} · auto-refresh every 4s`}
+        </p>
+        <button className="text-button" onClick={() => startSync(() => router.refresh())} disabled={isSyncing}>
+          {isSyncing ? 'Syncing…' : 'Refresh now'}
+        </button>
       </div>
 
       {active === 'Body' && (
@@ -280,8 +288,11 @@ function Ready({ label, ready, detail }: { label: string; ready: boolean; detail
 function InsightBlock({ insight, fallback }: { insight: InsightRow | undefined; fallback: string }) {
   if (!insight) {
     return (
-      <div className="insight-block insight-empty">
-        <span className="insight-label">Latest from Telegram</span>
+      <div className="insight-block insight-empty" aria-live="polite" aria-busy="true">
+        <span className="insight-label">
+          <span className="sync-dot syncing" aria-hidden="true" />
+          Waiting for Telegram insight
+        </span>
         <p>{fallback}</p>
       </div>
     )

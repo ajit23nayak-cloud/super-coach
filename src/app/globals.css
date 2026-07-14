@@ -293,6 +293,31 @@ h3 {
   color: var(--accent);
 }
 
+/* -------- Sync indicator (live-refresh state) -------- */
+.sync-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--muted-2);
+  vertical-align: middle;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.sync-dot.syncing {
+  background: var(--accent-3);
+  box-shadow: 0 0 0 0 rgba(77, 208, 255, 0.55);
+  animation: sync-pulse 1.4s ease-out infinite;
+}
+@keyframes sync-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(77, 208, 255, 0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(77, 208, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(77, 208, 255, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sync-dot.syncing { animation: none; }
+}
+
 /* -------- Insight block (Telegram narrative mirror) -------- */
 .insight-block {
   display: grid;
