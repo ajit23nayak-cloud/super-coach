@@ -126,9 +126,9 @@ export default function Home() {
     setCheckInError(null)
   }, [])
 
-  const refresh = useCallback(async (activeToken: string | null) => {
-    setLoading(true)
-    setError(null)
+  const refresh = useCallback(async (activeToken: string | null, silent: boolean = false) => {
+    if (!silent) setLoading(true)
+    if (!silent) setError(null)
     try {
       const headers = bearerHeaders(activeToken)
       const responses = await Promise.all([
@@ -175,15 +175,23 @@ export default function Home() {
       }
       setLastRefreshed(Date.now())
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to load live data')
+      if (!silent) setError(caught instanceof Error ? caught.message : 'Unable to load live data')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
     const timer = window.setTimeout(() => void refresh(readToken(sessionStore())), 0)
-    return () => window.clearTimeout(timer)
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void refresh(readToken(sessionStore()), true)
+      }
+    }, 4000)
+    return () => {
+      window.clearTimeout(timer)
+      window.clearInterval(interval)
+    }
   }, [refresh])
 
   async function submitToken(event: FormEvent) {
@@ -489,13 +497,13 @@ export default function Home() {
                 />
               </div>
               <div className="mind-field">
-                <label htmlFor="hedged-decision">Hedged decision</label>
+                <label htmlFor="hedged-decision">Avoided decision</label>
                 <input
                   id="hedged-decision"
                   type="text"
                   value={checkInForm.hedgedDecision}
                   onChange={event => updateForm('hedgedDecision', event.target.value)}
-                  placeholder="The decision you have been hedging"
+                  placeholder="The decision you have been avoiding"
                   maxLength={500}
                 />
               </div>
