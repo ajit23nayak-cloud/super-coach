@@ -27,9 +27,9 @@ For secure Convex boundaries, partial health-snapshot normalization, privacy-saf
 
 ## Telegram navigation
 
-- The Home floor contains exactly four buttons: `Body`, `Mind`, `Career`, `Super`. Do not add Home as a fifth button there.
+- The Home menu contains exactly four buttons: `Body`, `Mind`, `Career`, `Super`. Do not add Home as a fifth button there.
 - Treat `Home` and `🏠 Home` as the same navigation command. On either, run `python scripts/send_telegram_menu.py --view home` from this skill directory, reset the active mode, and reply briefly that the user is back at Home.
-- Before handling `Body`, `Mind`, `Career`, or `Super`, run `python scripts/send_telegram_menu.py --view floor --floor <Mode>` from this skill directory. This replaces the keyboard with exactly one `🏠 Home` button while conversation continues naturally inside the selected floor.
+- Before handling `Body`, `Mind`, `Career`, or `Super`, run `python scripts/send_telegram_menu.py --view floor --floor <Mode>` from this skill directory (the `--floor` flag is an internal CLI argument only). This replaces the keyboard with exactly one `🏠 Home` button while conversation continues naturally inside the selected mode. Never say the word "floor" to the user. When entering a mode, reply exactly: `<Mode> mode. Ask naturally, or tap 🏠 Home to return to the four modes.`
 - A Home action is navigation only. It must not trigger coaching, delegation, Gmail, Calendar, or Convex writes.
 
 ## Chat output hygiene (non-negotiable)
@@ -69,7 +69,7 @@ Every response is read on a phone before a laptop. Design for that.
 
 ## Routing
 
-Normalize the first non-whitespace token case-insensitively. Route `Home` and `🏠 Home` to the Home floor. Otherwise route once to Body, Mind, Career, or Super and stay in that floor until the user selects Home or another mode.
+Normalize the first non-whitespace token case-insensitively. Route `Home` and `🏠 Home` to Home. Otherwise route once to Body, Mind, Career, or Super and stay in that mode until the user selects Home or another mode.
 
 | Mode | Handler section | Never do |
 |---|---|---|
@@ -155,12 +155,12 @@ Super orchestrates. It does not read Gmail, Convex, or run check-ins directly �
 
    ```
    delegate_task(tasks=[
-     {"goal": "Body sub-agent: from C:/Users/ajit2/Ajit/super-coach run `npx convex data healthReadings --deployment accomplished-moose-243 --limit 20 --format json`; extract today's metrics, dated context, progress toward 10,000 steps, keywords, and at least three metric-grounded recommendations.",
-      "context": "Use the super-coach skill's Body mode. Real Convex only, no invention. Do not read secret files or use the authenticated HTTP endpoint."},
-     {"goal": "Mind sub-agent: from C:/Users/ajit2/Ajit/super-coach run `npx convex data decisions --deployment accomplished-moose-243 --limit 20 --format json`; return JSON: {open_decisions, hedge_streak_days, dominant_state}.",
-      "context": "Use the super-coach skill's Mind mode read path. Do not run a fresh check-in, request secrets, or use the authenticated HTTP endpoint."},
-     {"goal": "Career sub-agent: sweep Gmail across the prior 48 hours and Calendar from two days back through two days forward; rank travel, commitments, conflicts, critical topics, and opportunities by importance; return keywords, evidence IDs, and one attention-allocation choice.",
-      "context": "Use the super-coach skill's Career mode. DRAFT ONLY, do not send or modify anything. Flights and high-consequence topics such as MIS must not be crowded out by alerts or credits."}
+     {"goal": "Body sub-agent: from C:/Users/ajit2/Ajit/super-coach run `npx convex data healthReadings --deployment accomplished-moose-243 --limit 20 --format json`; return ONE compact JSON evidence atom only — the single most decision-relevant current metric (value, unit, IST timestamp, recency, confidence) or the explicit missing-data fact. One read, then return. Do NOT write recommendations.",
+      "context": "Use the super-coach skill's Body mode read path. Real Convex only, no invention. Lightweight: one bounded read, then return. Do not read secret files or use the authenticated HTTP endpoint."},
+     {"goal": "Mind sub-agent: from C:/Users/ajit2/Ajit/super-coach run `npx convex data decisions --deployment accomplished-moose-243 --limit 20 --format json`; return compact JSON only: {open_decisions_count, oldest_open_decision, oldest_open_decision_age_days, top_open_decision, hedge_streak_days, dominant_state}. One read, then return.",
+      "context": "Use the super-coach skill's Mind mode read path. Do not run a fresh check-in, request secrets, or use the authenticated HTTP endpoint. Lightweight: one bounded read, then return."},
+     {"goal": "Career sub-agent: LIGHTWEIGHT sweep only — the 10-15 most recent unread or relationship Gmail threads from the last 24 hours (no deep pagination) plus Calendar for the next 48 hours; return ONE highest-signal evidence atom as compact JSON (topic/person/thread/event, evidence ID, timing, importance, confidence). Draft nothing, send nothing.",
+      "context": "Use the super-coach skill's Career mode read path. Bounded: a few reads then return — you need one atom, not a full sweep. Flights and high-consequence topics such as MIS must not be crowded out by alerts or credits."}
    ])
    ```
 
@@ -188,18 +188,20 @@ Super orchestrates. It does not read Gmail, Convex, or run check-ins directly �
 
 5. Output shape (send to Telegram):
 
-   ```
-   CUMULATIVE INSIGHT: <2-4 sentences; cites Body + Mind + Career and states the non-obvious combined meaning>
-   THREE-DOMAIN CHAIN: <Body FACT> → <Mind FACT> → <Career FACT>; INFERENCE: <causal interpretation>
-   DOMINANT CONSTRAINT: <one sentence>
-   LEVERAGE POINT: <one sentence>
-   DECISION: <one concrete choice or question; state that nothing will be executed without confirmation>
-   CONFIDENCE: <HIGH | MEDIUM | LOW, with the stale or missing evidence named>
-   ```
+   The insight is a compressed maxim, not a report. The entire message is UNDER 100 WORDS and is plain prose: NO tables, NO markdown tables, NO code fences, NO bulleted metric lists, NO labeled sections. Aim for the highest value per word — cut anything that does not change what Ajit does next.
 
-   Do not add a `PER-DOMAIN` section that merely repeats the children. The evidence belongs inside the chain; the value of Super is the cumulative insight.
+   If an unmade hedged decision has stayed open across days (`oldest_open_decision` with `oldest_open_decision_age_days` >= 2), open the maxim by naming it and its age — e.g., `Still open since Jul 13: whether to ship the MIS.` — then tie it into today's cross-domain read. This resurfacing is the compounding-memory thread; do it whenever an aged open decision exists, and keep the whole message under 100 words even with it.
 
-   Generate audio only after the final synthesis, never for activation, interim child results, per-domain updates, or follow-ups. One Super run may produce at most one ElevenLabs voice note. Rewrite the spoken version to 100-120 words, verify it is under 60 seconds, and use a warm, calm, peer-level coach voice rather than an announcer or rushed delivery. The audio includes the cumulative insight, two or three decisive evidence points, and the decision; it must not read IDs, JSON, or long metric lists aloud.
+   Write at most three tight sentences plus a decision:
+   - One or two sentences that ARE the fused insight: name the Body–Mind–Career link and the non-obvious combined meaning in the fewest words that carry it.
+   - One sentence: the single decision Ajit must make. Nothing executes without his explicit confirmation.
+   - A short trailing tag: `Confidence: HIGH | MEDIUM | LOW` naming any stale or missing evidence.
+
+   The step-3 structure (three-domain chain, dominant constraint, leverage point) is PRIVATE reasoning — do not print those labels or a per-domain breakdown in the maxim. Their conclusion belongs compressed inside it. The value of Super is the single cumulative insight, not a dashboard.
+
+   **Optional per-domain read (only on request).** After the maxim, add exactly one short follow-up line: `Want the per-domain read?` If Ajit replies yes (or `per-domain`, `go deeper`, `expand`), send one tight sharpening sentence per domain — `Body: …`, `Mind: …`, `Career: …`, one line each, plain prose, no tables. If he does not ask, never send it. Default stays compressed; depth stays one tap away.
+
+   Generate audio only after the final synthesis, never for activation, interim child results, per-domain updates, or follow-ups. One Super run produces at most one ElevenLabs voice note. Speak the SAME under-100-word insight — do not expand it for the audio. Deliver at natural 1.0x pace: warm, calm, peer-level, unhurried. Never compress, rush, or speed up delivery to fit a time target, and never set a playback rate above 1.0 — let the clip length simply follow the words. Never read IDs, JSON, or metric lists aloud.
 
 6. Before sending, run this silent quality gate:
    - Are all three domains explicitly cited?
@@ -208,6 +210,8 @@ Super orchestrates. It does not read Gmail, Convex, or run check-ins directly �
    - Are FACT and INFERENCE distinguishable?
    - Are recency and confidence explicit?
    - Is there exactly one decision?
+   - Is the whole message under 100 words and plain prose — no tables, code fences, or labeled sections?
+   - Does the spoken version match the text and read at natural, unhurried pace (no rate above 1.0)?
 
    If any answer is no, rewrite once. Done when the final synthesis is delivered and Ajit either confirms or declines the decision.
 
